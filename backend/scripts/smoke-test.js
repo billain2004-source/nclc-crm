@@ -253,6 +253,67 @@ async function login(email, password) {
   check('team user rejects own run', (await call(`/agents/runs/${tuRun.data.id}/reject`, { token: tu.token, method: 'POST' })).data.status === 'rejected');
   check('other firm cannot see a run (404)', (await call(`/agents/runs/${run1.data.id}`, { token: fa.token })).status === 404);
 
+  // ================= Part B - Stage 4: relationship fixes =================
+  const mgCompanies = (await call('/companies?pageSize=100', { token: mg.token })).data.data;
+  const mgContacts = (await call('/contacts?pageSize=100', { token: mg.token })).data.data;
+  const ctA = mgContacts.find((c) => c.company_id);
+  const otherCo = mgCompanies.find((c) => c.id !== ctA.company_id);
+  check('deal contact must work at the deal company (400)', (await call('/deals', { token: mg.token, method: 'POST', body: { name: 'Mismatch', company_id: otherCo.id, contact_id: ctA.id } })).status === 400);
+  const okDeal = await call('/deals', { token: mg.token, method: 'POST', body: { name: 'Match', company_id: ctA.company_id, contact_id: ctA.id } });
+  check('deal with matching company + contact is accepted', okDeal.status === 201);
+  await call(`/deals/${okDeal.data.id}`, { token: mg.token, method: 'DELETE' });
+  check('invalid firm time zone rejected (400)', (await call('/firm', { token: fa.token, method: 'PUT', body: { timezone: 'Mars/Olympus' } })).status === 400);
+  check('valid IANA time zone accepted', (await call('/firm', { token: fa.token, method: 'PUT', body: { timezone: 'Europe/London' } })).status === 200);
+  const fkLead = await call('/leads', { token: mg.token, method: 'POST', body: { first_name: 'Fk', last_name: 'Check', company_name: 'FK Check Co' } });
+  const fkConv = await call(`/leads/${fkLead.data.id}/convert`, { token: mg.token, method: 'POST', body: { create_deal: true } });
+  await call(`/deals/${fkConv.data.deal_id}`, { token: mg.token, method: 'DELETE' });
+  check('deleting a converted deal clears leads.converted_deal_id (FK)', (await call(`/leads/${fkLead.data.id}`, { token: mg.token })).data.converted_deal_id === null);
+  await call(`/contacts/${fkConv.data.contact_id}`, { token: mg.token, method: 'DELETE' });
+  await call(`/companies/${fkConv.data.company_id}`, { token: mg.token, method: 'DELETE' });
+  await call(`/leads/${fkLead.data.id}`, { token: mg.token, method: 'DELETE' });
+
+  // ================= Part B - Stage 5: dropdown values from tables =================
+  const lkAll = await call('/lookups', { token: mg.token });
+  check('GET /lookups returns all 9 lists to any user', lkAll.status === 200 && lkAll.data.lists.length === 9);
+  check('lead_status values come from lookup_values', (lkAll.data.values.lead_status || []).map((v) => v.code).join() === 'new,contacted,qualified,unqualified,converted');
+  check('Manager cannot edit dropdown values (403)', (await call('/lookups/lead_source/values', { token: mg.token, method: 'POST', body: { label: 'Nope' } })).status === 403);
+  check('invalid lead source rejected by API (400)', (await call('/leads', { token: mg.token, method: 'POST', body: { first_name: 'Lk', last_name: 'Bad', source: 'carrier_pigeon' } })).status === 400);
+  check('invalid task priority rejected by API (400)', (await call('/tasks', { token: mg.token, method: 'POST', body: { title: 'Lk', priority: 'urgent' } })).status === 400);
+  // Firm Admin adds a firm-only value, uses it, relabels it, and tries to delete it while in use
+  const addV = await call('/lookups/lead_source/values', { token: fa.token, method: 'POST', body: { label: 'Smoke Fair' } });
+  check('Firm Admin adds a firm-only value (code from label)', addV.status === 201 && addV.data.code === 'smoke_fair' && addV.data.scope === 'firm_only');
+  check('duplicate code rejected (409)', (await call('/lookups/lead_source/values', { token: fa.token, method: 'POST', body: { label: 'Smoke Fair' } })).status === 409);
+  const lkLead = await call('/leads', { token: fa.token, method: 'POST', body: { first_name: 'Lk', last_name: 'Fair', source: 'smoke_fair' } });
+  check('record can use the new value', lkLead.status === 201 && lkLead.data.source === 'smoke_fair');
+  check('value in use cannot be deleted (409)', (await call('/lookups/lead_source/values/smoke_fair', { token: fa.token, method: 'DELETE' })).status === 409);
+  await call('/lookups/lead_source/values/smoke_fair', { token: fa.token, method: 'PUT', body: { is_active: false } });
+  check('deactivated value rejected for new records (400)', (await call('/leads', { token: fa.token, method: 'POST', body: { first_name: 'Lk', last_name: 'Two', source: 'smoke_fair' } })).status === 400);
+  check('existing record keeps a deactivated value on edit', (await call(`/leads/${lkLead.data.id}`, { token: fa.token, method: 'PUT', body: { source: 'smoke_fair', notes: 'edited' } })).status === 200);
+  // Other firms do not see this firm's value
+  const otherLk = await call('/lookups/lead_source', { token: tu.token });
+  check('firm-only value is invisible to other firms', !otherLk.data.values.some((v) => v.code === 'smoke_fair'));
+  // Firm override of a global label, then reset to default
+  const relabel = await call('/lookups/lead_status/values/qualified', { token: fa.token, method: 'PUT', body: { label: 'Sales Qualified' } });
+  check('Firm Admin relabels a default value (firm override)', relabel.status === 200 && relabel.data.label === 'Sales Qualified' && relabel.data.scope === 'override');
+  check('other firms still see the default label', (await call('/lookups/lead_status', { token: tu.token })).data.values.find((v) => v.code === 'qualified').label === 'Qualified');
+  check('system value cannot be deactivated (400)', (await call('/lookups/lead_status/values/converted', { token: fa.token, method: 'PUT', body: { is_active: false } })).status === 400);
+  check('fixed list rejects new values (400)', (await call('/lookups/deal_status/values', { token: fa.token, method: 'POST', body: { label: 'Paused' } })).status === 400);
+  check('Firm Admin cannot edit global defaults (403)', (await call('/lookups/lead_status/values/new', { token: fa.token, method: 'PUT', body: { label: 'X', scope: 'global' } })).status === 403);
+  check('Firm Admin cannot edit firm status list (403)', (await call('/lookups/firm_status/values/active', { token: fa.token, method: 'PUT', body: { label: 'Live' } })).status === 403);
+  const reorder = await call('/lookups/task_priority/reorder', { token: fa.token, method: 'POST', body: { codes: ['low', 'medium', 'high'] } });
+  check('reorder saves the new order for the firm', reorder.status === 200 && reorder.data.map((v) => v.code).join() === 'low,medium,high');
+  check('dashboard uses lookup labels', (await call('/dashboard', { token: fa.token })).data.leads_by_status.some((s) => s.label === 'Sales Qualified'));
+  // Clean up: reset overrides, delete the test lead and the firm-only value
+  await call('/lookups/lead_status/values/qualified', { token: fa.token, method: 'DELETE' });
+  for (const c of ['low', 'medium', 'high']) await call(`/lookups/task_priority/values/${c}`, { token: fa.token, method: 'DELETE' });
+  await call(`/leads/${lkLead.data.id}`, { token: fa.token, method: 'DELETE' });
+  check('unused firm-only value can be deleted', (await call('/lookups/lead_source/values/smoke_fair', { token: fa.token, method: 'DELETE' })).status === 200);
+  check('reset restores the default label', (await call('/lookups/lead_status', { token: fa.token })).data.values.find((v) => v.code === 'qualified').label === 'Qualified');
+  // Super Admin edits a global default and restores it
+  const g1 = await call('/lookups/task_type/values/meeting', { token: sa.token, method: 'PUT', body: { label: 'Meeting (global test)', scope: 'global' } });
+  check('Super Admin edits a global default', g1.status === 200 && (await call('/lookups/task_type', { token: tu.token })).data.values.find((v) => v.code === 'meeting').label === 'Meeting (global test)');
+  await call('/lookups/task_type/values/meeting', { token: sa.token, method: 'PUT', body: { label: 'Meeting', scope: 'global' } });
+
   console.log(results.join('\n'));
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

@@ -79,7 +79,8 @@ const leadScoring = {
     if (SENIOR.test(l.job_title || '')) { s += 20; reasons.push(`Senior decision-maker (${l.job_title})`); }
     if (l.has_email) s += 8; if (l.has_phone) s += 7;
     if (l.has_email && l.has_phone) reasons.push('Complete contact details');
-    if (['Referral', 'Partner'].includes(l.source)) { s += 15; reasons.push(`High-intent source: ${l.source}`); } else if (['Website', 'Webinar', 'Trade Show'].includes(l.source)) { s += 8; reasons.push(`Inbound source: ${l.source}`); }
+    const src = String(l.source || '').toLowerCase().replace(/[^a-z0-9]+/g, '_'); // lookup code (v1 stored labels)
+    if (['referral', 'partner'].includes(src)) { s += 15; reasons.push(`High-intent source: ${l.source}`); } else if (['website', 'webinar', 'trade_show'].includes(src)) { s += 8; reasons.push(`Inbound source: ${l.source}`); }
     const statusPts = { qualified: 15, contacted: 6, new: 0, unqualified: -30 }[l.status] ?? 0;
     s += statusPts; if (statusPts) reasons.push(`Status is ${l.status}`);
     if (Number(l.estimated_value) > 0) { const v = Math.min(15, Math.round(Math.log10(Number(l.estimated_value)) * 3)); s += v; }

@@ -1,27 +1,26 @@
 import EntityPage from '../components/EntityPage';
 import { api } from '../api';
 import { useAuth } from '../auth';
-import { dateTime, fromLocalInput, isOverdue, label, toLocalInput } from '../format';
+import { dateTime, fromLocalInput, isOverdue, toLocalInput } from '../format';
 import { opts, useLookups } from '../lookups';
+import { useDropdowns } from '../dropdowns';
 
-const TYPES = ['call', 'email', 'meeting', 'todo'];
-const PRIORITIES = ['high', 'medium', 'low'];
-const STATUSES = ['open', 'in_progress', 'done'];
 const TYPE_ICON = { call: '📞', email: '✉', meeting: '👥', todo: '☐' };
 
 export default function Tasks() {
   const { can, user } = useAuth();
   const lk = useLookups(['users', 'contacts', 'deals']);
-  const groups = [
+  const dd = useDropdowns();
+  const groups = (v) => [
     { title: 'Task details', help: 'tasks.basic', fields: [
       { name: 'title', label: 'Title', required: true, full: true },
-      { name: 'type', label: 'Type', type: 'select', required: true, options: opts.list(TYPES) },
+      { name: 'type', label: 'Type', type: 'select', required: true, options: dd.options('task_type', v.type) },
       { name: 'description', label: 'Description', type: 'textarea', full: true },
     ] },
     { title: 'Schedule & priority', help: 'tasks.schedule', fields: [
       { name: 'due_date', label: 'Due', type: 'datetime-local' },
-      { name: 'priority', label: 'Priority', type: 'select', required: true, options: opts.list(PRIORITIES) },
-      { name: 'status', label: 'Status', type: 'select', required: true, options: opts.list(STATUSES) },
+      { name: 'priority', label: 'Priority', type: 'select', required: true, options: dd.options('task_priority', v.priority) },
+      { name: 'status', label: 'Status', type: 'select', required: true, options: dd.options('task_status', v.status) },
       { name: 'assigned_to', label: 'Assigned to', type: 'select', options: opts.users(lk.users), disabled: !can.manage },
     ] },
     { title: 'Related records', help: 'tasks.links', fields: [
@@ -43,8 +42,9 @@ export default function Tasks() {
       fromForm={(v) => ({ ...v, due_date: fromLocalInput(v.due_date) })}
       rowClass={(r) => (isOverdue(r.due_date, r.status) ? 'row-overdue' : r.status === 'done' ? 'row-done' : '')}
       filters={[
-        { key: 'status', label: 'Status', options: opts.list(STATUSES) },
-        { key: 'priority', label: 'Priority', options: opts.list(PRIORITIES) },
+        { key: 'status', label: 'Status', options: dd.filter('task_status') },
+        { key: 'priority', label: 'Priority', options: dd.filter('task_priority') },
+        { key: 'type', label: 'Type', options: dd.filter('task_type') },
         { key: 'due', label: 'Due', options: [{ value: 'overdue', label: 'Overdue' }, { value: 'today', label: 'Today' }, { value: 'week', label: 'Next 7 days' }] },
         ...(can.manage ? [{ key: 'assigned_to', label: 'Assignee', options: opts.users(lk.users) }] : []),
       ]}
@@ -52,9 +52,9 @@ export default function Tasks() {
         { key: 'done', label: '', render: (r, reload) => (
           <input type="checkbox" aria-label="Mark done" checked={r.status === 'done'} onClick={(e) => e.stopPropagation()} onChange={() => toggleDone(r, reload)} />
         ) },
-        { key: 'title', label: 'Task', render: (r) => <><span aria-hidden>{TYPE_ICON[r.type]} </span><b>{r.title}</b>{(r.contact_name || r.deal_name) && <div className="muted small">{[r.contact_name, r.deal_name].filter(Boolean).join(' · ')}</div>}</> },
-        { key: 'priority', label: 'Priority', render: (r) => <span className={`pill ${r.priority}`}>{label(r.priority)}</span> },
-        { key: 'status', label: 'Status', render: (r) => <span className={`pill st-${r.status}`}>{label(r.status)}</span> },
+        { key: 'title', label: 'Task', render: (r) => <><span aria-hidden title={dd.label('task_type', r.type)}>{TYPE_ICON[r.type] || '•'} </span><b>{r.title}</b>{(r.contact_name || r.deal_name) && <div className="muted small">{[r.contact_name, r.deal_name].filter(Boolean).join(' · ')}</div>}</> },
+        { key: 'priority', label: 'Priority', render: (r) => <span className={`pill ${r.priority}`}>{dd.label('task_priority', r.priority)}</span> },
+        { key: 'status', label: 'Status', render: (r) => <span className={`pill st-${r.status}`}>{dd.label('task_status', r.status)}</span> },
         { key: 'due_date', label: 'Due', render: (r) => <span className="nowrap">{isOverdue(r.due_date, r.status) ? '⚠ ' : ''}{dateTime(r.due_date)}</span> },
         { key: 'assigned_name', label: 'Assigned to' },
       ]}

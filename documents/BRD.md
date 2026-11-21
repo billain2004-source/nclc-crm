@@ -1,6 +1,6 @@
 # NCLC CRM — Business Requirements Document (BRD)
 
-> **Document:** BRD v1.1 · **Last updated:** 2026-11-21 01:58 IST (UTC+05:30) · **Owner:** NCLC CRM project team
+> **Document:** BRD v1.2 · **Last updated:** 2026-11-21 14:25 IST (UTC+05:30) · **Owner:** NCLC CRM project team
 
 ---
 
@@ -32,6 +32,9 @@ Sources: [HubSpot CRM](https://www.hubspot.com/products/crm), [HubSpot community
 ### 3.2 Out of scope (v1)
 Email sync, marketing campaigns, tickets/service desk, quotes/invoices, workflow automation, file attachments, mobile apps, SSO.
 
+### 3.3 Added in v1.1 (Part B)
+AI provider key management with failover, three human-approved AI agents, table-driven dropdown values, developer setup and backup tooling, and a database relationship review. AI drafts emails but **does not send them** (email sync is still out of scope).
+
 ## 4. Stakeholders and user roles
 | Role | Scope | Typical user |
 |---|---|---|
@@ -57,6 +60,14 @@ Email sync, marketing campaigns, tickets/service desk, quotes/invoices, workflow
 | BR-12 | All list screens shall support search and paging. | Should |
 | BR-13 | The system shall record created/updated timestamps on all records. | Should |
 | BR-14 | Passwords shall be stored hashed (bcrypt). DB credentials shall come from `.env` and must never be hardcoded. | Must |
+| BR-15 *(v1.1)* | A Settings menu (Super Admin, Firm Admin) shall provide an API Keys page. Admins can add many keys (name, provider, key, task type, priority, status) with one active primary key per task type. Task types live in an editable table. | Must |
+| BR-16 *(v1.1)* | AI calls shall fail over automatically to the next key on quota, rate-limit or auth errors. Every switch is logged, usage and status are shown, and exhausted keys reset on a schedule or manually. | Must |
+| BR-17 *(v1.1)* | API keys shall be encrypted at rest (AES-256-GCM), shown only as the last 4 characters, never returned by the API, never written to logs, and never seeded with real values. A "Test key" action shall exist. | Must |
+| BR-18 *(v1.1)* | All AI features shall go through one service, `llmRouter.callLLM(taskType, payload)`. | Must |
+| BR-19 *(v1.1)* | Three AI agents (lead scoring, follow-up email draft, deal summary) shall be available from the UI, recorded in `agent_runs`, and require user approval before writing anything. | Must |
+| BR-20 *(v1.1)* | Every dropdown (statuses, sources, industries, priorities, task types, lifecycle stages) shall come from `lookup_lists`/`lookup_values`, with firm overrides, sort order, active flag, editable label and stable code. Role names stay fixed. | Must |
+| BR-21 *(v1.1)* | Developers shall be able to set up the project from GitHub using a setup script and guide. Backups shall exclude secrets, build output and API key data. | Must |
+| BR-22 *(v1.1)* | Every screen field shall be traceable to an API endpoint and a `table.column`, with foreign keys wherever relationships exist. | Should |
 
 ## 6. Business rules
 1. **Tenant isolation:** a non-Super Admin user can only read or write rows whose `firm_id` equals their own.
@@ -65,7 +76,10 @@ Email sync, marketing campaigns, tickets/service desk, quotes/invoices, workflow
 4. **Weighted forecast:** Σ(amount_base × probability) over open deals.
 5. **Lead conversion:** creates a Company (if a company name is present and doesn't exist), a Contact, and optionally a Deal, then sets the lead status to Converted. A converted lead can't be converted again.
 6. **Ownership:** a new record defaults its owner to the creator. Team Users can't assign records to other users.
-7. **Help text resolution:** the firm-specific row overrides the global row (`firm_id` NULL) for the same `section_key`.
+7. **Help text resolution:** the firm-specific row overrides the global row (`firm_id = 0`) for the same `section_key`.
+8. **Dropdown values (v1.1):** the firm's value overrides the global default with the same code. Records store the code, so renaming a label never changes data. A value in use can't be deleted, only deactivated. System values can't be deactivated.
+9. **AI approval (v1.1):** an AI agent may propose changes but never writes CRM data itself. A person with access to the record must approve, after optionally editing the proposal.
+10. **AI key failover (v1.1):** a key that hits quota, rate-limit or authorisation errors is marked exhausted and skipped until it resets (on a schedule or by hand). The next key by priority is used, with the firm's own keys first and then platform keys.
 
 ## 7. Non-functional requirements
 - **Security:** JWT auth, bcrypt hashing, parameterised SQL, CORS limited to the frontend origin.

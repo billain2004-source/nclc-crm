@@ -1,6 +1,6 @@
 # NCLC CRM — AI Agents
 
-> **Document:** AI Agents v1.0 · **Last updated:** 2026-11-21 14:40 IST (UTC+05:30)
+> **Document:** AI Agents v1.0 · **Last updated:** 2026-11-21 14:25 IST (UTC+05:30)
 
 Which CRM roles and tasks can be automated with LLM agents, how each one would work, and the three agents that are implemented in Part B.
 

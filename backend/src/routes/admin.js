@@ -2,7 +2,8 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { pool } = require('../db');
-const { ah, HttpError, ROLES, pick } = require('../utils');
+const { ah, HttpError, ROLES, pick, assertTimezone } = require('../utils');
+const { assertValues } = require('../services/lookups');
 const { requireRole, requireFirm } = require('../middleware/auth');
 const { getFirm } = require('../services/currency');
 
@@ -131,6 +132,8 @@ const FIRM_FIELDS = ['name', 'country_code', 'base_currency', 'timezone', 'domai
 firms.post('/', ah(async (req, res) => {
   const data = pick(req.body, FIRM_FIELDS);
   if (!data.name || !data.country_code || !data.base_currency) throw new HttpError(400, 'Name, country and base currency are required');
+  assertTimezone(data.timezone);
+  await assertValues(0, data, { status: 'firm_status' });
   const { admin_name, admin_email, admin_password } = req.body;
   if (admin_email && String(admin_password || '').length < 8) throw new HttpError(400, 'Admin password must be at least 8 characters');
   const conn = await pool.getConnection();
@@ -156,6 +159,8 @@ firms.post('/', ah(async (req, res) => {
 
 firms.put('/:id', ah(async (req, res) => {
   const data = pick(req.body, FIRM_FIELDS);
+  assertTimezone(data.timezone);
+  await assertValues(0, data, { status: 'firm_status' });
   const [r] = await pool.query('UPDATE firms SET ? WHERE id = ?', [data, req.params.id]);
   if (!r.affectedRows) throw new HttpError(404, 'Firm not found');
   res.json({ ok: true });
@@ -167,6 +172,7 @@ firm.use(requireFirm);
 firm.get('/', ah(async (req, res) => res.json(await getFirm(req.firmId))));
 firm.put('/', requireRole(ROLES.SA, ROLES.FA), ah(async (req, res) => {
   const data = pick(req.body, ['name', 'country_code', 'base_currency', 'timezone', 'domain']);
+  assertTimezone(data.timezone);
   if (Object.keys(data).length) await pool.query('UPDATE firms SET ? WHERE id = ?', [data, req.firmId]);
   res.json(await getFirm(req.firmId));
 }));

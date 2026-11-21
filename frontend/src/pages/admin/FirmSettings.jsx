@@ -43,7 +43,7 @@ export default function FirmSettings() {
             <Field f={{ name: 'name', label: 'Firm name', required: true, full: true }} value={v.name} onChange={set} />
             <Field f={{ name: 'country_code', label: 'Country', type: 'select', required: true, options: opts.countries(lk.countries) }} value={v.country_code} onChange={set} />
             <Field f={{ name: 'base_currency', label: 'Base currency', type: 'select', required: true, options: opts.currencies(lk.currencies) }} value={v.base_currency} onChange={set} />
-            <Field f={{ name: 'timezone', label: 'Time zone' }} value={v.timezone} onChange={set} />
+            <Field f={{ name: 'timezone', label: 'Time zone', type: 'select', required: true, options: opts.timezones(v.timezone) }} value={v.timezone} onChange={set} />
             <Field f={{ name: 'domain', label: 'Email domain' }} value={v.domain} onChange={set} />
           </div>
         </fieldset>

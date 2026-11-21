@@ -1,6 +1,6 @@
 -- =====================================================================
 -- Document: create_tables.sql v2.0
--- Last updated: 2026-11-21 13:56 IST (UTC+05:30)
+-- Last updated: 2026-11-21 14:25 IST (UTC+05:30)
 -- Source of truth: backend/db/schema.sql (this file is a copy for documentation)
 -- Run:  mysql -u <user> -p < create_tables.sql   (or: cd backend; npm run db:setup)
 -- Existing v1 databases: run `npm run db:migrate` (backend/db/migrate.js applies the ALTERs).
@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS leads (
   company_name          VARCHAR(150)  NULL,
   job_title             VARCHAR(100)  NULL,
   source                VARCHAR(40)   NULL,
-  status                ENUM('new','contacted','qualified','unqualified','converted') NOT NULL DEFAULT 'new',
+  status                VARCHAR(40)   NOT NULL DEFAULT 'new',   -- lookup list lead_status
   score                 TINYINT UNSIGNED NOT NULL DEFAULT 0,
   estimated_value       DECIMAL(16,2) NULL,
   currency_code         CHAR(3)       NULL,
@@ -220,9 +220,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   firm_id       INT UNSIGNED NOT NULL,
   title         VARCHAR(200) NOT NULL,
   description   TEXT         NULL,
-  type          ENUM('call','email','meeting','todo') NOT NULL DEFAULT 'todo',
-  priority      ENUM('low','medium','high') NOT NULL DEFAULT 'medium',
-  status        ENUM('open','in_progress','done') NOT NULL DEFAULT 'open',
+  type          VARCHAR(40)  NOT NULL DEFAULT 'todo',    -- lookup list task_type
+  priority      VARCHAR(40)  NOT NULL DEFAULT 'medium',  -- lookup list task_priority
+  status        VARCHAR(40)  NOT NULL DEFAULT 'open',    -- lookup list task_status
   due_date      DATETIME     NULL,
   completed_at  DATETIME     NULL,
   assigned_to   INT UNSIGNED NULL,
@@ -241,8 +241,11 @@ CREATE TABLE IF NOT EXISTS tasks (
   CONSTRAINT fk_tasks_deal     FOREIGN KEY (deal_id)     REFERENCES deals(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Note: leads.converted_deal_id has no FK (deals.lead_id already references leads; a second FK
--- would make the two tables mutually dependent). The application keeps it consistent.
+-- Foreign keys that point "forward" to tables created later in this file are added by
+-- backend/db/migrate.js (run automatically by `npm run db:setup`):
+--   fk_leads_deal  : leads.converted_deal_id -> deals.id  ON DELETE SET NULL
+--   fk_rates_user  : exchange_rates.created_by -> users.id ON DELETE SET NULL
+-- (Part B Stage 4: these were missing in v1; a deleted deal left a dangling converted_deal_id.)
 
 -- ---------- Context help ----------
 -- firm_id = 0 holds the global (default) text; a row with a real firm_id overrides it for that firm.
@@ -257,6 +260,43 @@ CREATE TABLE IF NOT EXISTS help_text (
   PRIMARY KEY (id),
   UNIQUE KEY uq_help_firm_key (firm_id, section_key),
   CONSTRAINT fk_help_user FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- Dropdown values (Settings > Dropdown Values) ----------
+-- A list per dropdown (lead status, industry, ...). Values with firm_id = 0 are the global defaults;
+-- a row with a real firm_id and the same code overrides label / order / active for that firm, and a
+-- firm row with a new code is a firm-only value. `code` is stable and is what business tables store;
+-- only `label` is shown. is_system values are used by business logic: they can be relabelled and
+-- reordered but not deactivated.
+CREATE TABLE IF NOT EXISTS lookup_lists (
+  code           VARCHAR(40)  NOT NULL,
+  name           VARCHAR(80)  NOT NULL,
+  description    VARCHAR(255) NULL,
+  used_by        VARCHAR(255) NULL,
+  allow_custom   TINYINT(1)   NOT NULL DEFAULT 1,
+  firm_editable  TINYINT(1)   NOT NULL DEFAULT 1,
+  sort_order     SMALLINT     NOT NULL DEFAULT 0,
+  created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS lookup_values (
+  id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  firm_id     INT UNSIGNED NOT NULL DEFAULT 0,
+  list_code   VARCHAR(40)  NOT NULL,
+  code        VARCHAR(40)  NOT NULL,
+  label       VARCHAR(100) NOT NULL,
+  sort_order  SMALLINT     NOT NULL DEFAULT 0,
+  is_active   TINYINT(1)   NOT NULL DEFAULT 1,
+  is_system   TINYINT(1)   NOT NULL DEFAULT 0,
+  updated_by  INT UNSIGNED NULL,
+  created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_lookup_firm_list_code (firm_id, list_code, code),
+  KEY ix_lookup_list (list_code, firm_id, sort_order),
+  CONSTRAINT fk_lookup_list FOREIGN KEY (list_code)  REFERENCES lookup_lists(code) ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT fk_lookup_user FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------- AI: task types, API keys (encrypted), usage log ----------

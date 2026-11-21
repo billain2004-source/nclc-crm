@@ -8,6 +8,7 @@ const config = require('../src/config');
 const { seed, syncHelp } = require('../db/seed');
 const { seedAi } = require('../db/seedAi');
 const { migrate } = require('../db/migrate');
+const { seedLookups } = require('../db/seedLookups');
 
 (async () => {
   const reset = process.argv.includes('--reset');
@@ -35,6 +36,7 @@ const { migrate } = require('../db/migrate');
     await seed(conn);
     await syncHelp(conn);
     await seedAi(conn);
+    await seedLookups(conn);
     await conn.commit();
   } catch (e) {
     await conn.rollback();

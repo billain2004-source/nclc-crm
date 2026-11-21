@@ -4,12 +4,10 @@ import Modal from '../components/Modal';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { HelpIcon } from '../help';
-import { label, money } from '../format';
+import { money } from '../format';
 import { opts, useLookups } from '../lookups';
+import { useDropdowns } from '../dropdowns';
 import { AgentButton } from '../components/Agents';
-
-const STATUSES = ['new', 'contacted', 'qualified', 'unqualified'];
-export const SOURCES = ['Website', 'Referral', 'LinkedIn', 'Trade Show', 'Cold Call', 'Email Campaign', 'Partner', 'Webinar'];
 
 function ConvertModal({ lead, stages, currencies, onClose, onDone }) {
   const [v, setV] = useState({
@@ -54,6 +52,9 @@ function ConvertModal({ lead, stages, currencies, onClose, onDone }) {
 export default function Leads() {
   const { can, user, firm } = useAuth();
   const lk = useLookups(['users', 'countries', 'currencies', 'stages']);
+  const dd = useDropdowns();
+  // "Converted" is only set by the Convert action, so the form offers it only on converted leads
+  const statusOptions = (v) => dd.options('lead_status', v.status).filter((o) => (v.status === 'converted' ? o.value === 'converted' : o.value !== 'converted'));
   const [converting, setConverting] = useState(null);
   const [signal, setSignal] = useState(0);
 
@@ -68,9 +69,8 @@ export default function Leads() {
       { name: 'country_code', label: 'Country', type: 'select', options: opts.countries(lk.countries) },
     ] },
     { title: 'Qualification', help: 'leads.qualification', fields: [
-      { name: 'source', label: 'Source', type: 'select', options: SOURCES.map((s) => ({ value: s, label: s })) },
-      { name: 'status', label: 'Status', type: 'select', required: true, disabled: v.status === 'converted',
-        options: opts.list(v.status === 'converted' ? ['converted'] : STATUSES) },
+      { name: 'source', label: 'Source', type: 'select', options: dd.options('lead_source', v.source) },
+      { name: 'status', label: 'Status', type: 'select', required: true, disabled: v.status === 'converted', options: statusOptions(v) },
       { name: 'score', label: 'Score (0–100)', type: 'number', min: 0, max: 100 },
       { name: 'owner_id', label: 'Owner', type: 'select', options: opts.users(lk.users), disabled: !can.manage },
     ] },
@@ -88,15 +88,15 @@ export default function Leads() {
         defaults={{ status: 'new', score: 50, currency_code: firm.base_currency, country_code: firm.country_code, owner_id: user.role === 'super_admin' ? '' : user.id }}
         fromForm={(v) => { const { status, ...rest } = v; return status === 'converted' ? rest : v; }}
         filters={[
-          { key: 'status', label: 'Status', options: opts.list([...STATUSES, 'converted']) },
-          { key: 'source', label: 'Source', options: SOURCES.map((s) => ({ value: s, label: s })) },
+          { key: 'status', label: 'Status', options: dd.filter('lead_status') },
+          { key: 'source', label: 'Source', options: dd.filter('lead_source') },
           ...(can.manage ? [{ key: 'owner_id', label: 'Owner', options: opts.users(lk.users) }] : []),
         ]}
         columns={[
           { key: 'full_name', label: 'Name', render: (r) => <><b>{r.full_name}</b><div className="muted small">{r.email}</div></> },
           { key: 'company_name', label: 'Company' },
-          { key: 'source', label: 'Source' },
-          { key: 'status', label: 'Status', render: (r) => <span className={`pill st-${r.status}`}>{label(r.status)}</span> },
+          { key: 'source', label: 'Source', render: (r) => dd.label('lead_source', r.source) },
+          { key: 'status', label: 'Status', render: (r) => <span className={`pill st-${r.status}`}>{dd.label('lead_status', r.status)}</span> },
           { key: 'score', label: 'Score', align: 'right', render: (r) => <span className="score"><span style={{ width: `${r.score}%` }} />{r.score}</span> },
           { key: 'estimated_value', label: `Est. value (${firm.base_currency})`, align: 'right', render: (r) => (
             <span title={`Original: ${money(r.estimated_value, r.currency_code)}`}>{money(r.estimated_value_base, r.base_currency)}{r.currency_code !== r.base_currency && r.estimated_value ? <small className="muted"> ({r.currency_code})</small> : null}</span>

@@ -3,6 +3,7 @@ const { pool } = require('../db');
 const { ah, ROLES } = require('../utils');
 const { requireFirm } = require('../middleware/auth');
 const { getLatestRates, convert, getFirm } = require('../services/currency');
+const { getValues } = require('../services/lookups');
 
 const router = express.Router();
 
@@ -18,7 +19,7 @@ router.get('/', requireFirm, ah(async (req, res) => {
     `SELECT
        (SELECT COUNT(*) FROM contacts  WHERE firm_id = ?) AS contacts,
        (SELECT COUNT(*) FROM companies WHERE firm_id = ?) AS companies,
-       (SELECT COUNT(*) FROM leads WHERE firm_id = ? AND status IN ('new','contacted','qualified')${own}) AS open_leads,
+       (SELECT COUNT(*) FROM leads WHERE firm_id = ? AND status NOT IN ('unqualified','converted')${own}) AS open_leads,
        (SELECT COUNT(*) FROM deals WHERE firm_id = ? AND status = 'open'${own}) AS open_deals`,
     [firmId, firmId, firmId, ...ownP, firmId, ...ownP]);
 
@@ -46,7 +47,14 @@ router.get('/', requireFirm, ah(async (req, res) => {
   }
 
   const [leadStatus] = await pool.query(`SELECT status, COUNT(*) AS count FROM leads WHERE firm_id = ?${own} GROUP BY status`, [firmId, ...ownP]);
-  const [leadSource] = await pool.query(`SELECT COALESCE(source,'Unknown') AS source, COUNT(*) AS count FROM leads WHERE firm_id = ?${own} GROUP BY source ORDER BY count DESC`, [firmId, ...ownP]);
+  const [leadSource] = await pool.query(`SELECT source, COUNT(*) AS count FROM leads WHERE firm_id = ?${own} GROUP BY source ORDER BY count DESC`, [firmId, ...ownP]);
+  // Labels from Settings > Dropdown Values (codes are stored in the tables)
+  const lk = await getValues(firmId);
+  const labelOf = (list, code) => (lk[list] || []).find((v) => v.code === code)?.label || code;
+  const statusOrder = (code) => (lk.lead_status || []).findIndex((v) => v.code === code);
+  leadStatus.sort((a, b) => statusOrder(a.status) - statusOrder(b.status));
+  for (const s of leadStatus) s.label = labelOf('lead_status', s.status);
+  for (const s of leadSource) s.label = s.source ? labelOf('lead_source', s.source) : 'Unknown';
 
   const taskScope = isTeam ? ' AND (t.assigned_to = ? OR t.created_by = ?)' : '';
   const taskP = isTeam ? [req.user.id, req.user.id] : [];

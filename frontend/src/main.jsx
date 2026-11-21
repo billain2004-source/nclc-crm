@@ -17,6 +17,7 @@ import Currencies from './pages/admin/Currencies';
 import HelpAdmin from './pages/admin/HelpAdmin';
 import FirmSettings from './pages/admin/FirmSettings';
 import ApiKeys from './pages/settings/ApiKeys';
+import Dropdowns from './pages/settings/Dropdowns';
 import AgentRuns from './pages/AgentRuns';
 import './styles.css';
 
@@ -57,6 +58,7 @@ function App() {
           <Route path="admin/settings" element={<Navigate to="/settings/firm" replace />} />
           <Route path="settings/firm" element={<Guard allow={ADMINS}>{needFirm(<FirmSettings />)}</Guard>} />
           <Route path="settings/api-keys" element={<Guard allow={ADMINS}><ApiKeys /></Guard>} />
+          <Route path="settings/dropdowns" element={<Guard allow={ADMINS}><Dropdowns /></Guard>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

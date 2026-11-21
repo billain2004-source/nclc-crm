@@ -1,6 +1,6 @@
 # NCLC CRM — User Stories
 
-> **Document:** User Stories v1.0 · **Last updated:** 2026-11-21 01:58 IST (UTC+05:30)
+> **Document:** User Stories v1.1 · **Last updated:** 2026-11-21 14:25 IST (UTC+05:30)
 
 Format: *As a <role>, I want <goal> so that <benefit>.* Acceptance criteria (AC) are testable. Status ✅ = implemented and covered by [Test Cases](Test_Cases.md).
 
@@ -45,3 +45,26 @@ Format: *As a <role>, I want <goal> so that <benefit>.* Acceptance criteria (AC)
 | US-E2 | As a **Firm Admin**, I want to edit help text for my firm so that it reflects our own process. | Edit from the popover or Admin › Help text. Saved as a firm override. Reset to default. | ✅ |
 | US-E3 | As a **Super Admin**, I want to edit the default help for all firms so that guidance stays consistent. | Scope "All firms (global)". Firms without an override see the change. | ✅ |
 | US-E4 | As **any user**, I want help on the login screen so that I know how to get access. | "?" on the login page uses public global help. | ✅ |
+| US-E5 *(v1.1)* | As an **admin**, I want help on every new Settings page so that I can configure AI keys and dropdowns safely. | 14 new help keys (`settings.api_keys*`, `settings.task_types`, `settings.api_usage`, `ai.*`, `settings.lookups*`). | ✅ |
+
+## Epic F — AI keys and agents (v1.1)
+| ID | Story | Acceptance criteria | Status |
+|---|---|---|---|
+| US-F1 | As a **Firm Admin**, I want to add several AI keys per task type with priorities so that work continues when one key runs out. | Add, edit, disable, delete, make primary; one primary per task type; priority order. | ✅ |
+| US-F2 | As a **Firm Admin**, I want exhausted keys skipped automatically and reset later so that nobody has to watch quotas. | 429/402/401/403 → exhausted with time; next key used; switch logged; auto-reset after N minutes or manual reset. | ✅ |
+| US-F3 | As a **security officer**, I want keys never shown or logged so that they can't leak. | Encrypted at rest; only last 4 visible; not in API responses, logs, usage log or backups. | ✅ |
+| US-F4 | As an **admin**, I want a Test key button so that I know a key works before relying on it. | Shows OK or the provider error; a failing quota key is marked exhausted; logged. | ✅ |
+| US-F5 | As a **Super Admin**, I want platform keys that firms fall back to so that firms without keys still get AI. | Platform scope; firm keys first, then platform. | ✅ |
+| US-F6 | As a **sales rep**, I want an AI lead score with reasons so that I prioritise better. | Button on the lead; score/rating/reasons shown; saved only after I approve (optionally edited). | ✅ |
+| US-F7 | As a **sales rep**, I want an AI-drafted follow-up email so that I reply faster. | Draft subject/body; on approval an Email task is created for me; nothing is sent automatically. | ✅ |
+| US-F8 | As a **manager**, I want an AI deal summary with risks so that reviews are quicker. | Summary, risk level, next step; appended to the deal description only after approval. | ✅ |
+| US-F9 | As a **manager**, I want a history of AI runs so that I can review and audit them. | AI agents page with status filter; key used, failover attempts, reviewer and note recorded. | ✅ |
+
+## Epic G — Configurable dropdowns and data quality (v1.1)
+| ID | Story | Acceptance criteria | Status |
+|---|---|---|---|
+| US-G1 | As a **Firm Admin**, I want to rename, reorder and hide dropdown values so that the CRM uses our terms. | Settings › Dropdown values; firm override; Reset to default; other firms unaffected. | ✅ |
+| US-G2 | As a **Firm Admin**, I want to add our own values (e.g. a lead source) so that we can track our channels. | Firm-only value with a stable code; usable in forms immediately; can't be deleted while used. | ✅ |
+| US-G3 | As a **Super Admin**, I want to maintain the default values for all firms so that new firms start sensibly. | Global scope; system values protected; fixed lists allow labels and order only. | ✅ |
+| US-G4 | As a **data owner**, I want the API to reject invalid values and mismatched links so that data stays consistent. | Unknown or inactive codes → 400; deal contact must belong to the deal company; valid time zones only; FKs on all real relationships. | ✅ |
+| US-G5 | As a **developer**, I want a setup script, guide and safe backup so that I can get started and recover quickly. | `setup.ps1`/`setup.sh`, Setup_Guide.md, backup zip without secrets; restore tested. | ✅ |

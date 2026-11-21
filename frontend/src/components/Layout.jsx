@@ -24,6 +24,7 @@ export default function Layout() {
   const settings = can.admin ? [
     { to: '/settings/firm', label: 'Firm settings' },
     { to: '/settings/api-keys', label: 'API Keys' },
+    { to: '/settings/dropdowns', label: 'Dropdown values' },
   ] : [];
 
   return (

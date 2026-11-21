@@ -1,6 +1,6 @@
 # NCLC CRM — Developer Setup Guide
 
-> **Document:** Setup Guide v1.0 · **Last updated:** 2026-11-21 14:55 IST (UTC+05:30)
+> **Document:** Setup Guide v1.0 · **Last updated:** 2026-11-21 14:25 IST (UTC+05:30)
 
 How another developer gets NCLC CRM running from the Git repository. Expect 10–15 minutes.
 
@@ -77,7 +77,12 @@ npm run db:migrate    # same as db:setup; use after pulling new code
 mysql -u root -p < documents/create_tables.sql     # creates nclc_crm and every table
 cd backend && npm run db:setup                     # loads the seed data (tables already exist)
 ```
-The seed loads 4 demo firms (GB/GBP, IN/INR, US/USD, SG/SGD), 17 users, 12–15 rows per module, help text, 4 AI task types and **fake placeholder API keys only** (mock provider, which works offline). No real API key is ever seeded.
+The seed loads:
+- 4 demo firms (GB/GBP, IN/INR, US/USD, SG/SGD), 17 users and 12–15 rows per module.
+- 55 help sections, 9 dropdown lists with 49 default values, and 4 AI task types.
+- **Fake placeholder API keys only.** They use the offline mock provider. No real API key is ever seeded.
+
+Databases created by an earlier version are upgraded in place by `npm run db:migrate`: new tables, foreign keys, ENUM → VARCHAR, and stored labels converted to dropdown codes.
 
 ## 6. Run
 Windows (background, logs in `.\logs`):

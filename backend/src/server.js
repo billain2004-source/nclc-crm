@@ -33,6 +33,7 @@ app.use('/api/users', admin.users);
 app.use('/api/firms', admin.firms);
 app.use('/api/firm', admin.firm);
 app.use('/api/ref', require('./routes/reference'));
+app.use('/api/lookups', require('./routes/lookups'));
 app.use('/api/ai', require('./routes/aiKeys'));
 app.use('/api/agents', require('./routes/agents'));
 

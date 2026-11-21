@@ -220,3 +220,17 @@ fieldset.group legend { font-weight: 600; padding: 0 6px; display: flex; align-i
   .form { grid-template-columns: 1fr; }
   .bar-row { grid-template-columns: 90px 1fr auto; }
 }
+
+/* Settings > Dropdown values */
+.split { display: flex; gap: 16px; align-items: flex-start; }
+.split > .card { margin-top: 0; }
+.list-picker { display: flex; flex-direction: column; padding: 6px; min-width: 220px; }
+.list-picker button { text-align: left; border: none; background: none; padding: 8px 10px; border-radius: 6px; cursor: pointer; font: inherit; display: flex; flex-direction: column; }
+.list-picker button small { font-size: 11px; }
+.list-picker button:hover { background: var(--bg, #f3f4f6); }
+.list-picker button.on { background: var(--text); color: #fff; }
+.list-picker button.on small { color: #ddd; }
+.add-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.add-row input { max-width: 220px; }
+.seg button:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 800px) { .split { flex-direction: column; } .list-picker { flex-direction: row; flex-wrap: wrap; min-width: 0; width: 100%; } }

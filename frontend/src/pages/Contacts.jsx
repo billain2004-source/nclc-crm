@@ -1,14 +1,13 @@
 import EntityPage from '../components/EntityPage';
 import { useAuth } from '../auth';
-import { label } from '../format';
 import { opts, useLookups } from '../lookups';
-
-const STAGES = ['subscriber', 'lead', 'opportunity', 'customer', 'evangelist', 'other'];
+import { useDropdowns } from '../dropdowns';
 
 export default function Contacts() {
   const { can, user } = useAuth();
   const lk = useLookups(['users', 'companies', 'countries']);
-  const groups = [
+  const dd = useDropdowns();
+  const groups = (v) => [
     { title: 'Contact details', help: 'contacts.basic', fields: [
       { name: 'first_name', label: 'First name', required: true },
       { name: 'last_name', label: 'Last name', required: true },
@@ -23,7 +22,7 @@ export default function Contacts() {
       { name: 'job_title', label: 'Job title' },
     ] },
     { title: 'Lifecycle & ownership', help: 'contacts.ownership', fields: [
-      { name: 'lifecycle_stage', label: 'Lifecycle stage', type: 'select', required: true, options: opts.list(STAGES) },
+      { name: 'lifecycle_stage', label: 'Lifecycle stage', type: 'select', required: true, options: dd.options('contact_lifecycle', v.lifecycle_stage) },
       { name: 'owner_id', label: 'Owner', type: 'select', options: opts.users(lk.users), disabled: !can.manage },
       { name: 'notes', label: 'Notes', type: 'textarea', full: true },
     ] },
@@ -34,7 +33,7 @@ export default function Contacts() {
       defaults={{ lifecycle_stage: 'lead', owner_id: user.role === 'super_admin' ? '' : user.id }}
       canDelete={() => can.manage}
       filters={[
-        { key: 'lifecycle_stage', label: 'Stage', options: opts.list(STAGES) },
+        { key: 'lifecycle_stage', label: 'Stage', options: dd.filter('contact_lifecycle') },
         { key: 'owner_id', label: 'Owner', options: opts.users(lk.users) },
       ]}
       columns={[
@@ -43,7 +42,7 @@ export default function Contacts() {
         { key: 'job_title', label: 'Job title' },
         { key: 'email', label: 'Email' },
         { key: 'phone', label: 'Phone' },
-        { key: 'lifecycle_stage', label: 'Stage', render: (r) => <span className={`pill lc-${r.lifecycle_stage}`}>{label(r.lifecycle_stage)}</span> },
+        { key: 'lifecycle_stage', label: 'Stage', render: (r) => <span className={`pill lc-${r.lifecycle_stage}`}>{dd.label('contact_lifecycle', r.lifecycle_stage)}</span> },
         { key: 'owner_name', label: 'Owner' },
       ]}
       formGroups={groups}

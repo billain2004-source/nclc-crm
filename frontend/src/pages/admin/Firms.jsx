@@ -3,12 +3,14 @@ import { api } from '../../api';
 import { useAuth } from '../../auth';
 import { HelpIcon } from '../../help';
 import { EntityForm } from '../../components/EntityPage';
-import { date, label } from '../../format';
+import { date } from '../../format';
 import { opts, useLookups } from '../../lookups';
+import { useDropdowns } from '../../dropdowns';
 
 export default function Firms() {
   const { reloadFirms, selectFirm, firm } = useAuth();
   const lk = useLookups(['countries', 'currencies']);
+  const dd = useDropdowns();
   const [rows, setRows] = useState([]);
   const [editing, setEditing] = useState(null);
   const [err, setErr] = useState('');
@@ -20,9 +22,9 @@ export default function Firms() {
       { name: 'name', label: 'Firm name', required: true, full: true },
       { name: 'country_code', label: 'Country', type: 'select', required: true, options: opts.countries(lk.countries) },
       { name: 'base_currency', label: 'Base currency', type: 'select', required: true, options: opts.currencies(lk.currencies) },
-      { name: 'timezone', label: 'Time zone', placeholder: 'e.g. Europe/London' },
+      { name: 'timezone', label: 'Time zone', type: 'select', required: true, options: opts.timezones(v.timezone) },
       { name: 'domain', label: 'Email domain', placeholder: 'firm.example' },
-      { name: 'status', label: 'Status', type: 'select', required: true, options: opts.list(['active', 'suspended']) },
+      { name: 'status', label: 'Status', type: 'select', required: true, options: dd.options('firm_status', v.status) },
     ] },
     ...(!v.id ? [{ title: 'First Firm Admin (optional)', help: 'admin.users.form', fields: [
       { name: 'admin_name', label: 'Admin name' },
@@ -55,7 +57,7 @@ export default function Firms() {
                 <td><b>{f.name}</b><div className="muted small">{f.domain}</div></td>
                 <td>{f.country_name}</td>
                 <td>{f.base_currency}</td>
-                <td><span className={`pill st-${f.status}`}>{label(f.status)}</span></td>
+                <td><span className={`pill st-${f.status}`}>{dd.label('firm_status', f.status)}</span></td>
                 <td className="right">{f.user_count}</td>
                 <td className="right">{f.contact_count}</td>
                 <td className="right">{f.deal_count}</td>

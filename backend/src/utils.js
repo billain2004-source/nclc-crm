@@ -23,4 +23,15 @@ function pick(body, fields) {
   return out;
 }
 
-module.exports = { HttpError, ah, ROLES, pick };
+// IANA time zone check (e.g. "Europe/London", "Asia/Kolkata", "UTC")
+function assertTimezone(tz) {
+  if (tz === undefined) return;
+  try {
+    if (!tz) throw new Error();
+    new Intl.DateTimeFormat('en', { timeZone: String(tz) }).format();
+  } catch {
+    throw new HttpError(400, `"${tz}" is not a valid time zone (use an IANA name such as Europe/London)`);
+  }
+}
+
+module.exports = { HttpError, ah, ROLES, pick, assertTimezone };

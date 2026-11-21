@@ -36,5 +36,13 @@ export const opts = {
   stages: (l) => l.map((s) => ({ value: s.id, label: `${s.name} (${s.probability}%)` })),
   currencies: (l) => l.filter((c) => c.is_active).map((c) => ({ value: c.code, label: `${c.code} — ${c.name}` })),
   countries: (l) => l.map((c) => ({ value: c.code, label: c.name })),
+  // IANA time zones from the browser (the API validates the same names)
+  timezones: (current) => {
+    let zones = [];
+    try { zones = Intl.supportedValuesOf('timeZone'); } catch { zones = ['UTC', 'Europe/London', 'Asia/Kolkata', 'America/Chicago', 'Asia/Singapore']; }
+    const all = ['UTC', ...zones.filter((z) => z !== 'UTC')];
+    if (current && !all.includes(current)) all.unshift(current);
+    return all.map((z) => ({ value: z, label: z.replace(/_/g, ' ') }));
+  },
   list: (arr) => arr.map((v) => (typeof v === 'string' ? { value: v, label: v.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) } : v)),
 };

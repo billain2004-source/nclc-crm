@@ -1,10 +1,12 @@
 # NCLC CRM — Test Cases
 
-> **Document:** Test Cases v1.0 · **Last updated:** 2026-11-21 01:58 IST (UTC+05:30)
+> **Document:** Test Cases v1.1 · **Last updated:** 2026-11-21 14:25 IST (UTC+05:30)
 
 ## How to run
-- **Automated API regression** (60 checks): start the API, then `cd backend; npm run test:api`.
+- **Automated API regression** (130 checks): start the API, then `cd backend; npm run test:api`.
 - **UI walkthrough:** headless Microsoft Edge driven by puppeteer-core logged in as each role, visited every page, and checked for console errors, help icons and the help-edit flow. Screenshots were reviewed manually.
+- **Database inspection:** `cd backend; node scripts/inspect-db.js` (tables, keys, indexes, 14 integrity checks; see [Data_Relationships.md](Data_Relationships.md)).
+- **Backup restore test:** run `scripts\backup.ps1`, unzip, then load `database/*.sql` into a scratch database and compare row counts.
 
 ## Latest results
 | Run | When (IST) | Result |
@@ -14,6 +16,14 @@
 | API smoke test after UTC fix + `db:reset` | 2026-11-21 01:51 | 58 / 58 passed |
 | Restart check (Stage 5): stop → verify down → start | 2026-11-21 01:56–01:57 | 260/260 module rows unchanged; help edit persisted; 60 / 60 API checks passed (incl. 2 new suspension checks); UI walkthrough 0 errors |
 | All 17 demo logins (Stage 6) | 2026-11-21 01:57 | 17 / 17 signed in |
+| **Part B** Stage 1+2 (API keys, agents) | 2026-11-21, before 13:56 | 102 / 102 passed |
+| Part B Stage 3: backup zip + restore into scratch DB | 2026-11-21 13:56 | 87 files; no `.env`/node_modules/logs/dist; `api_keys` & usage log not exported; 14/14 business tables restored with identical row counts |
+| Part B Stage 3: clean clone from GitHub + `setup.ps1` | 2026-11-21 ~14:00 | 86 tracked files; `.env` created with generated `JWT_SECRET`/`APP_ENC_KEY`, `DB_PASSWORD` left empty |
+| Part B Stage 4: relationship fixes + `inspect-db.js` | 2026-11-21 | 107 / 107 passed; 14/14 integrity checks 0 |
+| Part B Stage 5: dropdown values | 2026-11-21 | 130 / 130 passed (one bug found and fixed: Firm Admin `scope: global` was silently saved as a firm override, now 403) |
+| **FINAL:** stop → verify ports closed → start → API tests | 2026-11-21 14:16 | Both servers up; **130 / 130 passed** |
+| FINAL: UI walkthrough, 4 roles, every page incl. new Settings screens | 2026-11-21 14:16 | All pages rendered with help icons; 0 console/page errors; Manager → Dropdown values and Team User → API Keys correctly show "You do not have access"; lead form shows labels from the API |
+| FINAL: all 17 demo logins | 2026-11-21 14:18 | 17 / 17 signed in |
 
 ## 1. Authentication
 | ID | Test | Steps | Expected | Auto |
@@ -46,7 +56,8 @@
 | TC-RBAC-07 | TU creates a task assigned to someone else | 403 | ✅ |
 | TC-RBAC-08 | FA creates a super_admin user | 403 | ✅ |
 | TC-RBAC-09 | MG/TU edit help | 403 | ✅ |
-| TC-RBAC-10 | Admin menu items per role | SA: Firms/Users/Currencies/Help/Settings. FA: all but Firms. MG/TU: Currencies only | UI ✅ |
+| TC-RBAC-10 | Admin and Settings menu items per role | SA: Firms/Users/Currencies/Help + Settings (Firm settings, API Keys, Dropdown values). FA: same without Firms. MG/TU: Currencies only, no Settings | UI ✅ |
+| TC-RBAC-11 | MG/TU open `/settings/api-keys` or `/settings/dropdowns` | "You do not have access"; API returns 403 | ✅ |
 
 ## 4. Modules
 | ID | Test | Expected | Auto |
@@ -95,7 +106,80 @@
 | TC-HLP-08 | "?" present on every page, card and form group | Icons render; popover opens; Edit visible for FA/SA only | UI ✅ |
 | TC-HLP-09 | Edit help through the UI | Modal saves and closes; popover shows the new text | UI ✅ |
 
-## 8. Persistence and restart
+## 8. Settings › API Keys and llmRouter (Part B Stage 1)
+| ID | Test | Expected | Auto |
+|---|---|---|---|
+| TC-KEY-01 | List keys as FA / SA (firm and platform scope) | Only `key_last4` returned, never `key_enc` or the key | ✅ |
+| TC-KEY-02 | Add a key | 201, response shows only the last 4; stored encrypted (`v1:` AES-256-GCM, checked in the DB by hand) | ✅ + manual |
+| TC-KEY-03 | MG/TU call `/ai/keys` | 403 | ✅ |
+| TC-KEY-04 | FA edits/tests another firm's key; FA asks for `scope=platform`; FA sends another firm's `X-Firm-Id` | 404; forced back to own firm scope; header ignored | ✅ |
+| TC-KEY-05 | Failover: primary key returns 429 | Key marked `exhausted` with time; next key answers; `switch` and `exhausted` rows in the usage log | ✅ |
+| TC-KEY-06 | All keys fail | 502 with attempts; `all_failed` logged | manual (not automated) |
+| TC-KEY-06b | Firm keys unavailable | Falls back to platform keys | ✅ |
+| TC-KEY-07 | Reset one / all exhausted keys | Status back to `active`; `reset` logged | ✅ |
+| TC-KEY-08 | Automatic reset after `reset_minutes` | Sweep reactivates the key; `reset` with source `schedule` | ✅ (verified once by hand) |
+| TC-KEY-09 | Test key (good / 429 key) | `test_ok` / `test_fail` + exhausted | ✅ |
+| TC-KEY-10 | Make primary | Only one primary per task type and scope | ✅ |
+| TC-KEY-11 | Logs and API responses contain no key strings | Usage log and responses: automated; `logs/*.log` scanned by hand | ✅ + manual |
+| TC-KEY-12 | Task types: list has text/image/audio/embedding; FA adds one | 4 types / 403 | ✅ |
+| TC-KEY-13 | Unknown task type, key without a value | 400 / 400 | ✅ |
+
+## 9. AI agents (Part B Stage 2)
+| ID | Test | Expected | Auto |
+|---|---|---|---|
+| TC-AGT-01 | Run lead scoring | `agent_runs` row `pending_approval`; lead score **unchanged** | ✅ |
+| TC-AGT-02 | Approve (with edited score) | Lead score = edited value; run `approved`, reviewer recorded | ✅ |
+| TC-AGT-03 | Reject | Nothing written; run `rejected` | ✅ |
+| TC-AGT-04 | Follow-up email approve | Email task created, due tomorrow, assigned to approver | ✅ |
+| TC-AGT-05 | Deal summary approve | Dated summary appended to `deals.description` | ✅ |
+| TC-AGT-06 | Run when the first key is exhausted | Run records failover attempts and the key that answered | ✅ |
+| TC-AGT-07 | TU runs an agent on someone else's lead / own lead; lists runs | 404 / 201; sees own runs only | ✅ |
+| TC-AGT-08 | Approve twice | 400 (already reviewed) | ✅ |
+| TC-AGT-09 | Agent input minimisation | Lead scoring input contains no name or email | ✅ |
+| TC-AGT-10 | Another firm opens a run | 404 | ✅ |
+
+## 10. Backup, setup and Git (Part B Stage 3)
+| ID | Test | Expected | Auto |
+|---|---|---|---|
+| TC-BAK-01 | `scripts\backup.ps1` | Zip in `backups/`; excludes node_modules, `.env*`, logs, dist, `.git` | ✅ script check |
+| TC-BAK-02 | Key data in backup | `api_keys`/`api_key_usage_log` rows not exported; `agent_runs.key_id` NULL; no `v1:` ciphertext or `APP_ENC_KEY` value in any file | ✅ |
+| TC-BAK-03 | Restore `db_schema.sql` + `db_data.sql` into a scratch DB | Same row counts as live for all business tables | manual (passed 13:56) |
+| TC-GIT-01 | `git ls-files` | No `.env`, keys, logs, backups or node_modules tracked; staged content has no key material | manual (passed) |
+| TC-GIT-02 | Commit message | No Co-Authored-By / Claude attribution | manual (passed) |
+| TC-SET-01 | Fresh clone + `setup.ps1` | Dependencies installed; `.env` generated without a DB password | manual (passed) |
+
+## 11. Data relationships (Part B Stage 4)
+| ID | Test | Expected | Auto |
+|---|---|---|---|
+| TC-REL-01 | Deal whose primary contact works at another company | 400 | ✅ |
+| TC-REL-02 | Deal with matching company + contact | 201 | ✅ |
+| TC-REL-03 | Invalid firm time zone (`Mars/Olympus`) / valid IANA zone | 400 / 200 | ✅ |
+| TC-REL-04 | Delete a deal created by lead conversion | `leads.converted_deal_id` becomes NULL (FK `fk_leads_deal`) | ✅ |
+| TC-REL-05 | `inspect-db.js` integrity checks | All 14 return 0 | manual (passed) |
+| TC-REL-06 | `npm run db:migrate` twice | Second run: "Schema is up to date" | manual (passed) |
+
+## 12. Dropdown values (Part B Stage 5)
+| ID | Test | Expected | Auto |
+|---|---|---|---|
+| TC-LKP-01 | `GET /lookups` as any role | 9 lists with values in sort order | ✅ |
+| TC-LKP-02 | MG edits a value | 403 | ✅ |
+| TC-LKP-03 | Save a record with an unknown code (lead source, task priority) | 400 | ✅ |
+| TC-LKP-04 | FA adds a firm-only value | 201, code generated from label, scope `firm_only`; duplicate → 409 | ✅ |
+| TC-LKP-05 | Record uses the new value; delete it | 409 "used by N record(s)" | ✅ |
+| TC-LKP-06 | Deactivate the value | New records → 400; existing record keeps it on edit | ✅ |
+| TC-LKP-07 | Firm-only value visible to another firm | No | ✅ |
+| TC-LKP-08 | FA relabels a default value | `override` for that firm; other firms see the default | ✅ |
+| TC-LKP-09 | Deactivate a system value (`converted`) | 400 | ✅ |
+| TC-LKP-10 | Add a value to a fixed list (deal status) | 400 | ✅ |
+| TC-LKP-11 | FA edits global defaults / firm status list | 403 / 403 | ✅ |
+| TC-LKP-12 | Reorder | New order returned and used by forms | ✅ |
+| TC-LKP-13 | Dashboard labels | Lead status labels come from lookups | ✅ |
+| TC-LKP-14 | Reset override / delete unused firm-only value | Default label back / 200 | ✅ |
+| TC-LKP-15 | SA edits a global default | All firms see it | ✅ |
+| TC-LKP-16 | Forms load options from the API | Lead form shows "LinkedIn" for stored code `linkedin`; deactivated current values shown as "(inactive)" | UI ✅ |
+| TC-LKP-17 | Migration of v1 data | ENUM → VARCHAR; 96 stored labels (sources, industries) converted to codes; 0 unknown codes | manual (passed) |
+
+## 13. Persistence and restart
 | ID | Test | Expected |
 |---|---|---|
 | TC-RST-01 | Stop both servers, start again | Health OK, login works for all roles |

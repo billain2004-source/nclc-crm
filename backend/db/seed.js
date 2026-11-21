@@ -75,7 +75,9 @@ const FIRMS = [
 
 const JOB_TITLES = ['CEO', 'CFO', 'Head of Procurement', 'IT Director', 'Operations Manager', 'Marketing Director', 'Purchasing Manager', 'VP Sales', 'Finance Manager', 'CTO', 'Project Manager', 'Office Manager'];
 const LIFECYCLE = ['subscriber', 'lead', 'opportunity', 'customer', 'customer', 'evangelist', 'opportunity', 'lead'];
-const SOURCES = ['Website', 'Referral', 'LinkedIn', 'Trade Show', 'Cold Call', 'Email Campaign', 'Partner', 'Webinar'];
+// Stored as stable lookup codes (labels live in lookup_values; see seedLookups.js).
+// Company industries are written as labels here and converted to codes by seedLookups().
+const SOURCES = ['website', 'referral', 'linkedin', 'trade_show', 'cold_call', 'email_campaign', 'partner', 'webinar'];
 const LEAD_STATUSES = ['new', 'new', 'contacted', 'contacted', 'qualified', 'qualified', 'unqualified', 'new', 'contacted', 'qualified', 'new', 'contacted'];
 const DEAL_PRODUCTS = ['Annual Platform Licence', 'Implementation Services', 'Analytics Add-on', 'Support Renewal', 'Enterprise Upgrade', 'Pilot Project', 'Training Package', 'Data Migration', 'Multi-site Rollout', 'Consulting Retainer', 'Integration Bundle', 'Expansion Seats'];
 // stage index (0-based into DEFAULT_STAGES) for the 12 demo deals per firm
@@ -177,7 +179,7 @@ async function seed(conn, log = console.log) {
         source: SOURCES[i % SOURCES.length], status: LEAD_STATUSES[i], score: [35, 62, 48, 80, 91, 70, 15, 40, 55, 85, 22, 66][i],
         estimated_value: roundNice([12000, 30000, 8000, 55000, 24000, 90000, 5000, 16000, 40000, 70000, 11000, 26000][i] * latest[cur]),
         currency_code: cur, country_code: f.country, owner_id: owner(i + 1),
-        notes: i % 3 === 0 ? `Came in via ${SOURCES[i % SOURCES.length]}; interested in a demo.` : null,
+        notes: i % 3 === 0 ? `Came in via ${SOURCES[i % SOURCES.length].replace(/_/g, ' ')}; interested in a demo.` : null,
       }]);
     }
 

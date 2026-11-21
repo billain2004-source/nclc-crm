@@ -2,17 +2,17 @@ import EntityPage from '../components/EntityPage';
 import { useAuth } from '../auth';
 import { money } from '../format';
 import { opts, useLookups } from '../lookups';
-
-export const INDUSTRIES = ['Agriculture', 'Construction', 'Education', 'Energy', 'Financial Services', 'Food & Beverage', 'Healthcare', 'Hospitality', 'Insurance', 'Logistics', 'Manufacturing', 'Media', 'Retail', 'Technology', 'Other'];
+import { useDropdowns } from '../dropdowns';
 
 export default function Companies() {
   const { can, user, firm } = useAuth();
   const lk = useLookups(['users', 'countries', 'currencies']);
-  const groups = [
+  const dd = useDropdowns();
+  const groups = (v) => [
     { title: 'Company details', help: 'companies.basic', fields: [
       { name: 'name', label: 'Company name', required: true, full: true },
       { name: 'domain', label: 'Website domain', placeholder: 'example.com' },
-      { name: 'industry', label: 'Industry', type: 'select', options: opts.list(INDUSTRIES.map((i) => ({ value: i, label: i }))) },
+      { name: 'industry', label: 'Industry', type: 'select', options: dd.options('company_industry', v.industry) },
     ] },
     { title: 'Location & contact', help: 'companies.location', fields: [
       { name: 'phone', label: 'Phone' },
@@ -36,12 +36,12 @@ export default function Companies() {
       defaults={{ currency_code: firm.base_currency, country_code: firm.country_code, owner_id: user.role === 'super_admin' ? '' : user.id }}
       canDelete={() => can.manage}
       filters={[
-        { key: 'industry', label: 'Industry', options: INDUSTRIES.map((i) => ({ value: i, label: i })) },
+        { key: 'industry', label: 'Industry', options: dd.filter('company_industry') },
         { key: 'owner_id', label: 'Owner', options: opts.users(lk.users) },
       ]}
       columns={[
         { key: 'name', label: 'Company', render: (r) => <><b>{r.name}</b><div className="muted small">{r.domain}</div></> },
-        { key: 'industry', label: 'Industry' },
+        { key: 'industry', label: 'Industry', render: (r) => dd.label('company_industry', r.industry) },
         { key: 'city', label: 'City' },
         { key: 'employees', label: 'Employees', align: 'right', render: (r) => r.employees?.toLocaleString() ?? '—' },
         { key: 'annual_revenue', label: `Revenue (${firm.base_currency})`, align: 'right', render: (r) => (

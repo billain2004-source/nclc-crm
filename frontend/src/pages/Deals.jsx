@@ -3,8 +3,9 @@ import EntityPage, { EntityForm } from '../components/EntityPage';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { HelpIcon } from '../help';
-import { compactMoney, date, label, money } from '../format';
+import { compactMoney, date, money } from '../format';
 import { opts, useLookups } from '../lookups';
+import { useDropdowns } from '../dropdowns';
 import { AgentButton } from '../components/Agents';
 
 function DealAgents({ deal, onDone }) {
@@ -108,6 +109,7 @@ export default function Deals() {
   const [editing, setEditing] = useState(null);
   const [signal, setSignal] = useState(0);
   const { lk, groups } = useDealForm();
+  const dd = useDropdowns();
   const defaults = { currency_code: firm.base_currency, stage_id: lk.stages[0]?.id || '', amount: '', owner_id: user.role === 'super_admin' ? '' : user.id };
 
   function switchView(v) { setView(v); try { localStorage.setItem('nclc_deals_view', v); } catch { /* ignore */ } }
@@ -137,13 +139,13 @@ export default function Deals() {
         rowActions={(r, reload) => <AgentButton agent="deal_summary" entityType="deal" entityId={r.id} className="btn sm ghost" onDone={reload}>✨ AI summary</AgentButton>}
         filters={[
           { key: 'stage_id', label: 'Stage', options: opts.stages(lk.stages) },
-          { key: 'status', label: 'Status', options: opts.list(['open', 'won', 'lost']) },
+          { key: 'status', label: 'Status', options: dd.filter('deal_status') },
           ...(user.role !== 'team_user' ? [{ key: 'owner_id', label: 'Owner', options: opts.users(lk.users) }] : []),
         ]}
         columns={[
           { key: 'name', label: 'Deal', render: (r) => <><b>{r.name}</b><div className="muted small">{r.company_name}</div></> },
           { key: 'stage_name', label: 'Stage' },
-          { key: 'status', label: 'Status', render: (r) => <span className={`pill st-${r.status}`}>{label(r.status)}</span> },
+          { key: 'status', label: 'Status', render: (r) => <span className={`pill st-${r.status}`}>{dd.label('deal_status', r.status)}</span> },
           { key: 'amount', label: 'Amount', align: 'right', render: amountCell },
           { key: 'probability', label: 'Prob.', align: 'right', render: (r) => `${r.probability}%` },
           { key: 'expected_close_date', label: 'Close date', render: (r) => date(r.expected_close_date) },

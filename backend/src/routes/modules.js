@@ -30,6 +30,7 @@ const contacts = crudRouter({
   selectSql: `t.*, CONCAT(t.first_name, ' ', t.last_name) AS full_name, c.name AS company_name, u.name AS owner_name`,
   fromSql: `FROM contacts t LEFT JOIN companies c ON c.id = t.company_id LEFT JOIN users u ON u.id = t.owner_id`,
   filters: { company_id: 't.company_id', owner_id: 't.owner_id', lifecycle_stage: 't.lifecycle_stage' },
+  lookups: { lifecycle_stage: 'contact_lifecycle' },
   ownerCol: 'owner_id',
   deleteRoles: NOT_TEAM,
   defaultSort: 't.last_name ASC',
@@ -46,6 +47,7 @@ const companies = crudRouter({
     (SELECT COUNT(*) FROM deals d WHERE d.company_id = t.id) AS deal_count`,
   fromSql: `FROM companies t LEFT JOIN users u ON u.id = t.owner_id`,
   filters: { industry: 't.industry', owner_id: 't.owner_id', country_code: 't.country_code' },
+  lookups: { industry: 'company_industry' },
   ownerCol: 'owner_id',
   deleteRoles: NOT_TEAM,
   defaultSort: 't.name ASC',
@@ -61,6 +63,7 @@ const leads = crudRouter({
   selectSql: `t.*, CONCAT(t.first_name, ' ', t.last_name) AS full_name, u.name AS owner_name`,
   fromSql: `FROM leads t LEFT JOIN users u ON u.id = t.owner_id`,
   filters: { status: 't.status', source: 't.source', owner_id: 't.owner_id' },
+  lookups: { status: 'lead_status', source: 'lead_source' },
   ownerCol: 'owner_id',
   teamScope: { sql: 't.owner_id = ?', params: (u) => [u.id] },
   deleteRoles: ALL,
@@ -174,6 +177,17 @@ const deals = crudRouter({
       }
     }
     if (data.amount !== undefined && data.amount !== null && Number(data.amount) < 0) throw new HttpError(400, 'Amount cannot be negative');
+    // The deal form only offers contacts of the selected company; enforce the same rule in the API.
+    if (data.company_id !== undefined || data.contact_id !== undefined) {
+      const companyId = data.company_id !== undefined ? data.company_id : existing?.company_id;
+      const contactId = data.contact_id !== undefined ? data.contact_id : existing?.contact_id;
+      if (companyId && contactId) {
+        const [[ct]] = await pool.query('SELECT company_id FROM contacts WHERE id = ? AND firm_id = ?', [contactId, req.firmId]);
+        if (ct && ct.company_id && String(ct.company_id) !== String(companyId)) {
+          throw new HttpError(400, 'The primary contact works at a different company than the deal');
+        }
+      }
+    }
     const stageChanged = data.stage_id !== undefined && (!existing || String(data.stage_id) !== String(existing.stage_id));
     if (stageChanged) {
       const [s] = await pool.query('SELECT * FROM pipeline_stages WHERE id = ? AND firm_id = ?', [data.stage_id, req.firmId]);
@@ -223,6 +237,7 @@ const tasks = crudRouter({
     LEFT JOIN contacts ct ON ct.id = t.contact_id
     LEFT JOIN deals d ON d.id = t.deal_id`,
   filters: { status: 't.status', priority: 't.priority', type: 't.type', assigned_to: 't.assigned_to', deal_id: 't.deal_id', contact_id: 't.contact_id' },
+  lookups: { type: 'task_type', priority: 'task_priority', status: 'task_status' },
   ownerCol: 'assigned_to',
   createdByCol: 'created_by',
   teamScope: { sql: '(t.assigned_to = ? OR t.created_by = ?)', params: (u) => [u.id, u.id] },

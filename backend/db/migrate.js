@@ -19,7 +19,25 @@ async function hasIndex(conn, table, name) {
 }
 
 // [description, check(conn) -> true when the change is still needed, sql]
-const STEPS = [];
+const STEPS = [
+  // ---- Part B Stage 4: missing foreign keys found by scripts/inspect-db.js ----
+  ['FK leads.converted_deal_id -> deals.id (ON DELETE SET NULL)',
+    async (c) => !(await hasConstraint(c, 'leads', 'fk_leads_deal')),
+    [`UPDATE leads l LEFT JOIN deals d ON d.id = l.converted_deal_id SET l.converted_deal_id = NULL
+       WHERE l.converted_deal_id IS NOT NULL AND d.id IS NULL`,
+    'ALTER TABLE leads ADD CONSTRAINT fk_leads_deal FOREIGN KEY (converted_deal_id) REFERENCES deals(id) ON DELETE SET NULL']],
+  ['FK exchange_rates.created_by -> users.id (ON DELETE SET NULL)',
+    async (c) => !(await hasConstraint(c, 'exchange_rates', 'fk_rates_user')),
+    [`UPDATE exchange_rates e LEFT JOIN users u ON u.id = e.created_by SET e.created_by = NULL
+       WHERE e.created_by IS NOT NULL AND u.id IS NULL`,
+    'ALTER TABLE exchange_rates ADD CONSTRAINT fk_rates_user FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL']],
+  // ---- Part B Stage 5: dropdown columns become table-driven (lookup_values) ----
+  ...[['leads', 'status', 'new'], ['tasks', 'type', 'todo'], ['tasks', 'priority', 'medium'], ['tasks', 'status', 'open']].map(([t, col, def]) => [
+    `${t}.${col}: ENUM -> VARCHAR(40) (values now come from lookup_values)`,
+    async (c) => /^enum/i.test((await columnType(c, t, col)) || ''),
+    `ALTER TABLE ${t} MODIFY ${col} VARCHAR(40) NOT NULL DEFAULT '${def}'`,
+  ]),
+];
 
 async function migrate(conn, log = console.log) {
   let applied = 0;

@@ -1,6 +1,6 @@
 # NCLC CRM — Technical Requirements Document (TRD)
 
-> **Document:** TRD v1.0 · **Last updated:** 2026-11-21 01:58 IST (UTC+05:30) · **Related:** [BRD](BRD.md), [TD](TD.md)
+> **Document:** TRD v1.1 · **Last updated:** 2026-11-21 14:25 IST (UTC+05:30) · **Related:** [BRD](BRD.md), [TD](TD.md)
 
 ## 1. Technology stack
 | Layer | Technology | Version |
@@ -12,6 +12,7 @@
 | DB driver | mysql2 (promise pool) | 3.11.4 |
 | Auth | JSON Web Tokens (jsonwebtoken), bcryptjs | 9.0.2 / 2.4.3 |
 | Config | dotenv (`.env` at project root) | 16.4.5 |
+| AI (v1.1) | `@anthropic-ai/sdk` (Anthropic adapter); built-in `fetch` for OpenAI-compatible and Gemini APIs; Node `crypto` AES-256-GCM | 1.12.0 (exact pin) |
 
 ## 2. Technical requirements
 | ID | Requirement |
@@ -32,6 +33,14 @@
 | TR-14 | Data must persist across server restarts (MySQL). The servers hold no in-memory state except the stateless JWT. |
 | TR-15 | The frontend dev server proxies `/api` to the backend, so the browser uses a single origin. CORS is limited to `CLIENT_ORIGIN`. |
 | TR-16 | Responsive layout down to phone width (sidebar collapses to a top bar below 900px). |
+| TR-17 *(v1.1)* | `APP_ENC_KEY` (32 bytes, hex) in `.env` is required. API keys are stored as AES-256-GCM `v1:iv:tag:ciphertext`. Responses expose only `key_last4`. Every stored or logged error message passes through `redact()`. |
+| TR-18 *(v1.1)* | All AI calls go through `llmRouter.callLLM`. Failover classifies HTTP 429/402/401/403 as exhausting. Provider SDK retries are disabled, so the router sees every failure. Per-call timeout is `LLM_TIMEOUT_MS`. |
+| TR-19 *(v1.1)* | Exhausted keys reset after `ai_task_types.reset_minutes`, checked lazily and by a sweep every `AI_KEY_RESET_SWEEP_MINUTES`. |
+| TR-20 *(v1.1)* | Agent results are stored in `agent_runs` as proposals. Approval re-checks access and applies changes in a single DB transaction. |
+| TR-21 *(v1.1)* | Dropdown columns are validated on the server against `lookup_values` for the caller's firm. Values are stable codes (`[a-z0-9_]`, ≤ 40 chars). |
+| TR-22 *(v1.1)* | Schema changes for existing databases go through idempotent migrations (`backend/db/migrate.js`), applied by `npm run db:setup` / `db:migrate`. |
+| TR-23 *(v1.1)* | Backups (`scripts/backup.ps1`) must exclude `.env*`, node_modules, logs, build output and all API key data, and must abort if any is found. |
+| TR-24 *(v1.1)* | Git: `.env`, keys, logs and backups are git-ignored (checked with `git ls-files`). Commits carry no AI attribution lines. |
 
 ## 3. Environments and ports
 | Component | URL | Notes |
@@ -49,4 +58,5 @@
 ## 5. Constraints and assumptions
 - Single MySQL instance on localhost; a shared schema with a `firm_id` discriminator (no schema-per-tenant).
 - Exchange rates are maintained manually by the Super Admin (no live feed in v1). Seed rates are demo values.
+- AI providers are reached over the internet with keys the customer supplies. The seeded keys are offline `mock` placeholders, so the demo and tests need no network.
 - Windows was the target dev OS (PowerShell start/stop scripts), but the code is cross-platform.

@@ -5,10 +5,12 @@
 //   * Team Users can't assign records to other users
 //   * referenced ids (company_id, contact_id, ...) must belong to the same firm
 //   * delete is limited to cfg.deleteRoles
+//   * dropdown columns (cfg.lookups: column -> lookup list) must hold an active value from lookup_values
 const express = require('express');
 const { pool } = require('../db');
 const { ah, HttpError, ROLES, pick } = require('../utils');
 const { requireFirm } = require('../middleware/auth');
+const { assertValues } = require('../services/lookups');
 
 const REF_TABLES = {
   company_id: 'companies',
@@ -33,7 +35,7 @@ function crudRouter(cfg) {
   const {
     table, fields, required = [], searchCols = [], selectSql, fromSql,
     filters = {}, ownerCol, teamScope, deleteRoles, defaultSort = 't.updated_at DESC',
-    createdByCol, beforeSave, decorate, extraWhere, extend,
+    createdByCol, beforeSave, decorate, extraWhere, extend, lookups = {},
   } = cfg;
 
   const router = express.Router();
@@ -109,6 +111,7 @@ function crudRouter(cfg) {
       }
     }
     if (beforeSave) data = await beforeSave(data, req, null);
+    await assertValues(req.firmId, data, lookups);
     await checkRefs(req.firmId, data);
     data.firm_id = req.firmId;
     if (createdByCol) data[createdByCol] = req.user.id;
@@ -128,6 +131,7 @@ function crudRouter(cfg) {
       if (newOwner !== oldOwner && newOwner !== req.user.id) throw new HttpError(403, 'Team users cannot assign records to other users');
     }
     if (beforeSave) data = await beforeSave(data, req, existing);
+    await assertValues(req.firmId, data, lookups, existing);
     const changedRefs = {};
     for (const col of Object.keys(REF_TABLES)) {
       if (data[col] !== undefined && String(data[col]) !== String(existing[col])) changedRefs[col] = data[col];

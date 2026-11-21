@@ -1,6 +1,6 @@
 # NCLC CRM — Use Cases
 
-> **Document:** Use Cases v1.0 · **Last updated:** 2026-11-21 01:58 IST (UTC+05:30)
+> **Document:** Use Cases v1.1 · **Last updated:** 2026-11-21 14:25 IST (UTC+05:30)
 
 Actors: **SA** Super Admin · **FA** Firm Admin · **MG** Manager · **TU** Team User · **SYS** the system.
 
@@ -21,6 +21,11 @@ Actors: **SA** Super Admin · **FA** Firm Admin · **MG** Manager · **TU** Team
 | UC-13 | Review the dashboard | All |
 | UC-14 | Read contextual help | All |
 | UC-15 | Edit help text | FA, SA |
+| UC-16 *(v1.1)* | Manage AI API keys | FA, SA |
+| UC-17 *(v1.1)* | AI call with automatic failover | SYS |
+| UC-18 *(v1.1)* | Run an AI agent and approve the result | All (TU: own records) |
+| UC-19 *(v1.1)* | Maintain dropdown values | FA, SA |
+| UC-20 *(v1.1)* | Set up the project and take a backup | Developer |
 
 ---
 
@@ -80,3 +85,54 @@ As UC-07, with the groups *Company details, Location & contact, Size & revenue, 
 
 ### UC-15 Edit help text
 **Actors:** FA, SA. **Flow:** In a help popover click **Edit**, or go to Admin › Help text and click a row → change the title or text → Save. FA edits apply only to their firm (override). SA chooses either *All firms (global)* or *Only <firm>*. **Reset to default** removes a firm override.
+
+### UC-16 Manage AI API keys
+**Actors:** FA (own firm), SA (any firm or platform keys).
+**Flow:**
+1. Settings › API Keys → **+ Add key**.
+2. Enter name, provider, task type, optional model, the key, priority and status → Save.
+3. SYS encrypts the key and shows only its last 4 characters. The first key for a task type becomes primary.
+4. **Test key** shows OK or the error. **Make primary**, **Reset**, **Disable/Enable** and **Edit** are available on each key.
+
+**Alternate:** the SA switches to *Platform keys* to manage fallback keys and edits task types (name, reset minutes, active).
+
+### UC-17 AI call with automatic failover
+**Actor:** SYS.
+**Trigger:** any AI feature calls `callLLM(taskType)`.
+**Flow:**
+1. SYS orders the active keys: firm keys, then platform keys; primary first, then priority.
+2. SYS calls the first key. If it returns 429/402/401/403, SYS marks it exhausted (with the time), logs *exhausted* and *switch*, and tries the next key.
+3. When a key answers, SYS logs *success* and updates the counters.
+
+**Exceptions:** no keys → "No active API key…" (503). All keys fail → "All N API key(s)… failed" (502), logged as *all_failed*.
+**Post-condition:** exhausted keys return to Active after the task type's reset time, or by manual Reset.
+
+### UC-18 Run an AI agent and approve the result
+**Actors:** any user with access to the lead or deal.
+**Flow:**
+1. On a lead, click **✨ AI score** / **Score this lead** / **Draft follow-up email**. On a deal, click **Summarise deal & risks** / **Draft follow-up email**.
+2. SYS runs the agent through UC-17 and shows the proposal, the key used and any failover. Nothing is saved yet.
+3. The user edits the proposal if needed, then clicks **Approve & apply**. SYS re-checks access and writes the change: the lead score, a new Email task, or a note appended to the deal.
+
+**Alternate:** **Reject** saves nothing. Runs can be reviewed later under **AI agents**, where managers and admins can approve other users' pending runs.
+
+### UC-19 Maintain dropdown values
+**Actors:** FA (own firm), SA (global defaults or a firm).
+**Flow:**
+1. Settings › Dropdown values → pick a list.
+2. Change a label → **Save**. Use ▲▼ to reorder. **Deactivate** or **Activate** a value. **Add a value** (label, optional code).
+
+**Rules:**
+- FA changes are firm overrides; **Reset** restores the default.
+- System values can't be deactivated, and fixed lists accept no new values.
+- A value in use can't be deleted.
+- Forms show the changes immediately, and the API rejects inactive or unknown codes on new data.
+
+### UC-20 Set up the project and take a backup
+**Actor:** developer.
+**Flow:**
+1. Clone the repository and run `scripts\setup.ps1` (or `setup.sh`).
+2. Fill in `DB_USER` and `DB_PASSWORD` in `.env`.
+3. Run `npm run db:setup`, then `scripts\start.ps1`.
+
+**Backup:** `scripts\backup.ps1` creates a zip with code, documents, the schema SQL and the data SQL, without `.env`, node_modules, logs, build output or any API key data. See [Setup_Guide.md](Setup_Guide.md).
