@@ -6,6 +6,7 @@ import { useAuth } from '../auth';
 import { HelpIcon } from '../help';
 import { label, money } from '../format';
 import { opts, useLookups } from '../lookups';
+import { AgentButton } from '../components/Agents';
 
 const STATUSES = ['new', 'contacted', 'qualified', 'unqualified'];
 export const SOURCES = ['Website', 'Referral', 'LinkedIn', 'Trade Show', 'Cold Call', 'Email Campaign', 'Partner', 'Webinar'];
@@ -102,9 +103,23 @@ export default function Leads() {
           ) },
           { key: 'owner_name', label: 'Owner' },
         ]}
-        rowActions={(r) => r.status === 'converted'
-          ? <span className="muted small">Converted</span>
-          : <button className="btn sm" onClick={() => setConverting(r)}>Convert</button>}
+        rowActions={(r, reload) => (
+          <>
+            <AgentButton agent="lead_scoring" entityType="lead" entityId={r.id} className="btn sm ghost" onDone={reload}>✨ AI score</AgentButton>{' '}
+            {r.status === 'converted'
+              ? <span className="muted small">Converted</span>
+              : <button className="btn sm" onClick={() => setConverting(r)}>Convert</button>}
+          </>
+        )}
+        formExtra={(r, closeAndReload) => (
+          <div className="note">
+            <b>AI agents</b> <HelpIcon k="ai.agents" /> <span className="muted small">Results need your approval before anything is saved.</span>
+            <div className="page-actions" style={{ marginTop: 6 }}>
+              <AgentButton agent="lead_scoring" entityType="lead" entityId={r.id} onDone={closeAndReload}>✨ Score this lead</AgentButton>
+              <AgentButton agent="followup_email" entityType="lead" entityId={r.id} onDone={closeAndReload}>✨ Draft follow-up email</AgentButton>
+            </div>
+          </div>
+        )}
         formGroups={groups}
       />
       {converting && (

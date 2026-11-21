@@ -122,6 +122,13 @@ textarea { resize: vertical; }
 .pill.st-qualified, .pill.lc-customer { background: #efe9fb; color: #5f3dc4; }
 .pill.st-won, .pill.st-done, .pill.st-converted, .pill.st-active, .pill.lc-evangelist { background: var(--ok-soft); color: var(--ok); }
 .pill.st-lost, .pill.st-unqualified, .pill.st-suspended { background: var(--danger-soft); color: var(--danger); }
+.pill.st-exhausted, .pill.st-pending_approval { background: var(--warn-soft); color: var(--warn); }
+.pill.st-disabled, .pill.st-rejected { background: #eef0f3; color: var(--muted); }
+.pill.st-approved { background: var(--ok-soft); color: var(--ok); }
+.pill.st-failed { background: var(--danger-soft); color: var(--danger); }
+.ai-out { background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; white-space: pre-wrap; line-height: 1.5; margin: 0 0 10px; font: inherit; }
+.ai-meta { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 12px; }
+.ai-btn { white-space: nowrap; }
 .pill.role-super_admin { background: #1f2633; color: #fff; }
 .pill.role-firm_admin { background: var(--accent-soft); color: var(--accent); }
 .pill.role-manager { background: #efe9fb; color: #5f3dc4; }

@@ -31,4 +31,10 @@ module.exports = {
   jwtSecret: required('JWT_SECRET'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '8h',
   clientOrigins: (process.env.CLIENT_ORIGIN || 'http://localhost:5173').split(',').map((s) => s.trim()),
+  // Master key for AES-256-GCM encryption of stored AI provider API keys (never logged, never sent to clients)
+  appEncKey: required('APP_ENC_KEY'),
+  // How often (minutes) the API checks for exhausted AI keys whose reset window has passed
+  keyResetSweepMinutes: Number(process.env.AI_KEY_RESET_SWEEP_MINUTES || 5),
+  // Per-call timeout for AI provider requests
+  llmTimeoutMs: Number(process.env.LLM_TIMEOUT_MS || 60000),
 };

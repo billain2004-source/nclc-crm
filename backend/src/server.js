@@ -33,6 +33,8 @@ app.use('/api/users', admin.users);
 app.use('/api/firms', admin.firms);
 app.use('/api/firm', admin.firm);
 app.use('/api/ref', require('./routes/reference'));
+app.use('/api/ai', require('./routes/aiKeys'));
+app.use('/api/agents', require('./routes/agents'));
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 
@@ -56,4 +58,6 @@ app.use((err, req, res, next) => {
 
 app.listen(config.apiPort, () => {
   console.log(`NCLC CRM API listening on http://localhost:${config.apiPort} (db: ${config.db.database})`);
+  // Reactivate exhausted AI keys once their task type's reset window has passed
+  require('./services/llmRouter').startResetSweep(config.keyResetSweepMinutes);
 });

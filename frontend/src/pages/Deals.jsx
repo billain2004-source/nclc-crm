@@ -5,6 +5,19 @@ import { useAuth } from '../auth';
 import { HelpIcon } from '../help';
 import { compactMoney, date, label, money } from '../format';
 import { opts, useLookups } from '../lookups';
+import { AgentButton } from '../components/Agents';
+
+function DealAgents({ deal, onDone }) {
+  return (
+    <div className="note">
+      <b>AI agents</b> <HelpIcon k="ai.agents" /> <span className="muted small">Results need your approval before anything is saved.</span>
+      <div className="page-actions" style={{ marginTop: 6 }}>
+        <AgentButton agent="deal_summary" entityType="deal" entityId={deal.id} onDone={onDone}>✨ Summarise deal & risks</AgentButton>
+        <AgentButton agent="followup_email" entityType="deal" entityId={deal.id} onDone={onDone}>✨ Draft follow-up email</AgentButton>
+      </div>
+    </div>
+  );
+}
 
 function useDealForm() {
   const { can } = useAuth();
@@ -120,6 +133,8 @@ export default function Deals() {
       <EntityPage
         title="Deals" helpKey="deals" endpoint="/deals" toolbar={toggle} reloadSignal={signal}
         defaults={defaults} formGroups={groups}
+        formExtra={(d, closeAndReload) => <DealAgents deal={d} onDone={closeAndReload} />}
+        rowActions={(r, reload) => <AgentButton agent="deal_summary" entityType="deal" entityId={r.id} className="btn sm ghost" onDone={reload}>✨ AI summary</AgentButton>}
         filters={[
           { key: 'stage_id', label: 'Stage', options: opts.stages(lk.stages) },
           { key: 'status', label: 'Status', options: opts.list(['open', 'won', 'lost']) },
@@ -148,7 +163,8 @@ export default function Deals() {
       <Board onEdit={setEditing} signal={signal} />
       {editing && (
         <EntityForm title={editing.id ? 'Edit deal' : 'New deal'} helpKey="deals" groups={groups} initial={editing}
-          onSubmit={save} onDelete={editing.id ? remove : null} onClose={() => setEditing(null)} />
+          onSubmit={save} onDelete={editing.id ? remove : null} onClose={() => setEditing(null)}
+          extra={editing.id ? <DealAgents deal={editing} onDone={() => { setEditing(null); setSignal((s) => s + 1); }} /> : null} />
       )}
     </div>
   );

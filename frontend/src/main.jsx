@@ -16,7 +16,11 @@ import Users from './pages/admin/Users';
 import Currencies from './pages/admin/Currencies';
 import HelpAdmin from './pages/admin/HelpAdmin';
 import FirmSettings from './pages/admin/FirmSettings';
+import ApiKeys from './pages/settings/ApiKeys';
+import AgentRuns from './pages/AgentRuns';
 import './styles.css';
+
+const ADMINS = ['super_admin', 'firm_admin'];
 
 function Guard({ allow, children }) {
   const { user } = useAuth();
@@ -45,11 +49,14 @@ function App() {
           <Route path="leads" element={needFirm(<Leads />)} />
           <Route path="deals" element={needFirm(<Deals />)} />
           <Route path="tasks" element={needFirm(<Tasks />)} />
+          <Route path="ai/agents" element={needFirm(<AgentRuns />)} />
           <Route path="admin/firms" element={<Guard allow={['super_admin']}><Firms /></Guard>} />
           <Route path="admin/users" element={<Guard allow={['super_admin', 'firm_admin']}><Users /></Guard>} />
           <Route path="admin/currencies" element={<Currencies />} />
           <Route path="admin/help" element={<Guard allow={['super_admin', 'firm_admin']}><HelpAdmin /></Guard>} />
-          <Route path="admin/settings" element={<Guard allow={['super_admin', 'firm_admin']}>{needFirm(<FirmSettings />)}</Guard>} />
+          <Route path="admin/settings" element={<Navigate to="/settings/firm" replace />} />
+          <Route path="settings/firm" element={<Guard allow={ADMINS}>{needFirm(<FirmSettings />)}</Guard>} />
+          <Route path="settings/api-keys" element={<Guard allow={ADMINS}><ApiKeys /></Guard>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

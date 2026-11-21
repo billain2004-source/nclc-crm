@@ -157,6 +157,102 @@ async function login(email, password) {
   const saEdit = await call('/help/admin.help', { token: sa.token, method: 'PUT', body: { title: orig.title, body: orig.body } });
   check('Super Admin edits global help', saEdit.status === 200 && saEdit.data.scope === 'global');
 
+  // ================= Part B - Stage 1: Settings > API Keys + llmRouter failover =================
+  check('Manager cannot open API keys (403)', (await call('/ai/keys', { token: mg.token })).status === 403);
+  check('Team user cannot open API keys (403)', (await call('/ai/keys', { token: tu.token })).status === 403);
+  const faKeys = await call('/ai/keys', { token: fa.token, firm: sh.id });
+  check('FA lists own firm keys only (X-Firm-Id ignored)', faKeys.status === 200 && faKeys.data.scope === 'firm' && faKeys.data.firm_id === nw.id);
+  check('FA cannot switch to platform scope', (await call('/ai/keys?scope=platform', { token: fa.token })).data.scope === 'firm');
+  const rawKeys = JSON.stringify(faKeys.data);
+  check('key list never contains key_enc or a full key', !rawKeys.includes('key_enc') && !rawKeys.includes('mock-demo') && faKeys.data.data.every((k) => /^.{4}$/.test(k.key_last4)));
+  const types = (await call('/ai/task-types', { token: fa.token })).data;
+  check('task types table has text/image/audio/embedding', ['text', 'image', 'audio', 'embedding'].every((c) => types.some((t) => t.code === c)));
+  check('FA cannot add task types (403)', (await call('/ai/task-types', { token: fa.token, method: 'POST', body: { code: 'x_type', name: 'X' } })).status === 403);
+  check('key without value rejected (400)', (await call('/ai/keys', { token: fa.token, method: 'POST', body: { name: 'x', provider: 'mock', task_type: 'text' } })).status === 400);
+  const secretValue = 'mock-smoke-secret-value-7788';
+  const added = await call('/ai/keys', { token: fa.token, method: 'POST', body: { name: 'Smoke key', provider: 'mock', task_type: 'text', priority: 5, key: secretValue } });
+  check('FA adds a key; response shows only last 4', added.status === 201 && added.data.key_last4 === '7788' && !JSON.stringify(added.data).includes(secretValue));
+  const nwFailKey = faKeys.data.data.find((k) => k.key_last4 === '9429');
+  check('seeded Northwind rate-limit demo key is primary', nwFailKey && nwFailKey.is_primary === 1);
+  if (nwFailKey.status !== 'active') await call(`/ai/keys/${nwFailKey.id}/reset`, { token: fa.token, method: 'POST' });
+
+  const try1 = await call('/ai/try', { token: fa.token, method: 'POST', body: { task_type: 'text', prompt: 'hi' } });
+  check('callLLM fails over from the 429 key to the next key', try1.status === 200 && try1.data.attempts[0].ok === false && try1.data.attempts[0].error_type === 'rate_limit' && try1.data.key.id !== nwFailKey.id,
+    JSON.stringify(try1.data).slice(0, 200));
+  check('next key by priority is the firm smoke key', try1.data.key?.id === added.data.id);
+  const afterTry = (await call('/ai/keys', { token: fa.token })).data.data.find((k) => k.id === nwFailKey.id);
+  check('429 key marked exhausted with timestamp + auto-reset time', afterTry.status === 'exhausted' && afterTry.exhausted_at && afterTry.resets_at);
+  const log1 = (await call('/ai/usage', { token: fa.token })).data;
+  check('usage log has switch + exhausted events', log1.data.some((l) => l.event === 'switch' && l.key_id === nwFailKey.id && l.to_key_id === added.data.id) && log1.data.some((l) => l.event === 'exhausted' && l.key_id === nwFailKey.id));
+  check('usage log never contains key values', !JSON.stringify(log1).includes(secretValue) && !JSON.stringify(log1).includes('mock-demo'));
+  const try2 = await call('/ai/try', { token: fa.token, method: 'POST', body: { task_type: 'text' } });
+  check('exhausted key is skipped on the next call', try2.status === 200 && try2.data.attempts.length === 1 && try2.data.key.id === added.data.id);
+  await call(`/ai/keys/${added.data.id}`, { token: fa.token, method: 'PUT', body: { status: 'disabled' } });
+  const try3 = await call('/ai/try', { token: fa.token, method: 'POST', body: { task_type: 'text' } });
+  check('falls back to platform keys when firm keys are unavailable', try3.status === 200 && try3.data.key.scope === 'platform');
+  const reset = await call(`/ai/keys/${nwFailKey.id}/reset`, { token: fa.token, method: 'POST' });
+  check('manual reset reactivates an exhausted key', reset.status === 200 && reset.data.status === 'active' && !reset.data.exhausted_at);
+  const t1 = await call(`/ai/keys/${nwFailKey.id}/test`, { token: fa.token, method: 'POST' });
+  check('Test key reports failure and exhausts a 429 key', t1.status === 200 && t1.data.ok === false && t1.data.exhausted && t1.data.key.status === 'exhausted');
+  await call(`/ai/keys/${nwFailKey.id}/reset`, { token: fa.token, method: 'POST' });
+  await call(`/ai/keys/${added.data.id}`, { token: fa.token, method: 'PUT', body: { status: 'active' } });
+  const t2 = await call(`/ai/keys/${added.data.id}/test`, { token: fa.token, method: 'POST' });
+  check('Test key succeeds on a working key', t2.data.ok === true && t2.data.sample === 'OK');
+  const prim = await call(`/ai/keys/${added.data.id}/primary`, { token: fa.token, method: 'POST' });
+  const afterPrim = (await call('/ai/keys', { token: fa.token })).data.data.filter((k) => k.task_type === 'text' && k.is_primary);
+  check('only one primary key per task type', prim.status === 200 && afterPrim.length === 1 && afterPrim[0].id === added.data.id);
+  await call(`/ai/keys/${nwFailKey.id}/primary`, { token: fa.token, method: 'POST' });
+  const shKey = await call('/ai/keys', { token: sa.token, firm: sh.id, method: 'POST', body: { name: 'SH smoke', provider: 'mock', task_type: 'image', key: 'mock-sh-smoke-0001' } });
+  check('FA cannot read or edit another firm\'s key (404)', (await call(`/ai/keys/${shKey.data.id}`, { token: fa.token, method: 'PUT', body: { name: 'x' } })).status === 404
+    && (await call(`/ai/keys/${shKey.data.id}/test`, { token: fa.token, method: 'POST' })).status === 404);
+  await call(`/ai/keys/${shKey.data.id}`, { token: sa.token, firm: sh.id, method: 'DELETE' });
+  const plat = await call('/ai/keys?scope=platform', { token: sa.token, firm: nw.id });
+  check('SA sees platform keys', plat.data.scope === 'platform' && plat.data.data.length >= 5 && plat.data.data.every((k) => k.firm_id === null));
+  check('unknown task type rejected (400)', (await call('/ai/try', { token: fa.token, method: 'POST', body: { task_type: 'nope' } })).status === 400);
+  check('FA deletes a key', (await call(`/ai/keys/${added.data.id}`, { token: fa.token, method: 'DELETE' })).status === 200);
+
+  // ================= Part B - Stage 2: AI agents (approval required) =================
+  const agentList = await call('/agents', { token: tu.token });
+  check('3 agents available', agentList.status === 200 && ['lead_scoring', 'followup_email', 'deal_summary'].every((c) => agentList.data.some((a) => a.code === c)));
+  const mgLead = (await call('/leads?status=new', { token: mg.token })).data.data[0];
+  const run1 = await call('/agents/lead_scoring/run', { token: mg.token, method: 'POST', body: { entity_type: 'lead', entity_id: mgLead.id } });
+  check('lead scoring run is pending approval with key + proposal', run1.status === 201 && run1.data.status === 'pending_approval' && run1.data.key_name && run1.data.proposed_changes?.[0]?.table === 'leads'
+    && Number.isInteger(run1.data.output_json.score), JSON.stringify(run1.data).slice(0, 200));
+  check('agent input omits names/emails (data minimisation)', !JSON.stringify(run1.data.input_json).includes(mgLead.email) && !JSON.stringify(run1.data.input_json).includes(mgLead.last_name));
+  check('nothing written before approval', (await call(`/leads/${mgLead.id}`, { token: mg.token })).data.score === mgLead.score);
+  const ap1 = await call(`/agents/runs/${run1.data.id}/approve`, { token: mg.token, method: 'POST', body: { output: { score: 77 }, note: 'smoke' } });
+  check('approve applies the (edited) score', ap1.status === 200 && ap1.data.status === 'approved' && (await call(`/leads/${mgLead.id}`, { token: mg.token })).data.score === 77);
+  check('approved run cannot be approved again (400)', (await call(`/agents/runs/${run1.data.id}/approve`, { token: mg.token, method: 'POST' })).status === 400);
+  await call(`/leads/${mgLead.id}`, { token: mg.token, method: 'PUT', body: { score: mgLead.score } });
+  const run2 = await call('/agents/lead_scoring/run', { token: mg.token, method: 'POST', body: { entity_type: 'lead', entity_id: mgLead.id } });
+  const rj = await call(`/agents/runs/${run2.data.id}/reject`, { token: mg.token, method: 'POST', body: { note: 'not now' } });
+  check('reject leaves the record unchanged', rj.data.status === 'rejected' && (await call(`/leads/${mgLead.id}`, { token: mg.token })).data.score === mgLead.score);
+  // Northwind: its primary key simulates 429 -> agent run records failover
+  if (nwFailKey) await call(`/ai/keys/${nwFailKey.id}/reset`, { token: fa.token, method: 'POST' });
+  const nwDeal = nwDeals.find((d) => d.status === 'open');
+  const run3 = await call('/agents/deal_summary/run', { token: fa.token, method: 'POST', body: { entity_type: 'deal', entity_id: nwDeal.id } });
+  check('agent run records failover attempts and the key used', run3.data.status === 'pending_approval' && run3.data.attempts_json.length >= 2 && run3.data.attempts_json[0].ok === false && run3.data.key_name !== 'Northwind key (simulates rate limit)');
+  const descBefore = (await call(`/deals/${nwDeal.id}`, { token: fa.token })).data.description;
+  await call(`/agents/runs/${run3.data.id}/approve`, { token: fa.token, method: 'POST' });
+  const descAfter = (await call(`/deals/${nwDeal.id}`, { token: fa.token })).data.description;
+  check('deal summary appended to description on approval', descAfter.startsWith(descBefore || '') && descAfter.includes('[AI deal summary'));
+  await call(`/deals/${nwDeal.id}`, { token: fa.token, method: 'PUT', body: { description: descBefore } });
+  const run4 = await call('/agents/followup_email/run', { token: fa.token, method: 'POST', body: { entity_type: 'deal', entity_id: nwDeal.id } });
+  check('follow-up email draft has subject + body', run4.data.status === 'pending_approval' && run4.data.output_json.subject && run4.data.output_json.body);
+  const ap4 = await call(`/agents/runs/${run4.data.id}/approve`, { token: fa.token, method: 'POST', body: { output: { subject: 'Smoke follow-up' } } });
+  const emailTask = (await call(`/tasks?deal_id=${nwDeal.id}&q=Smoke follow-up`, { token: fa.token })).data.data[0];
+  check('approved email becomes an Email task (not sent)', ap4.data.status === 'approved' && emailTask && emailTask.type === 'email' && emailTask.assigned_to === fa.user.id);
+  if (emailTask) await call(`/tasks/${emailTask.id}`, { token: fa.token, method: 'DELETE' });
+  check('agent on the wrong record type rejected (400)', (await call('/agents/deal_summary/run', { token: fa.token, method: 'POST', body: { entity_type: 'lead', entity_id: 1 } })).status === 400);
+  const otherLead = (await call('/leads', { token: sa.token, firm: tuLeads.data.data[0].firm_id })).data.data.find((l) => l.owner_id !== tu.user.id);
+  check('team user cannot run an agent on someone else\'s lead (404)', (await call('/agents/lead_scoring/run', { token: tu.token, method: 'POST', body: { entity_type: 'lead', entity_id: otherLead.id } })).status === 404);
+  const tuRun = await call('/agents/lead_scoring/run', { token: tu.token, method: 'POST', body: { entity_type: 'lead', entity_id: tuLeads.data.data[0].id } });
+  check('team user runs an agent on own lead', tuRun.status === 201 && tuRun.data.status === 'pending_approval');
+  const tuRuns = await call('/agents/runs?status=', { token: tu.token });
+  check('team user sees only own runs', tuRuns.data.data.length > 0 && tuRuns.data.data.every((r) => r.created_by === tu.user.id));
+  check('team user rejects own run', (await call(`/agents/runs/${tuRun.data.id}/reject`, { token: tu.token, method: 'POST' })).data.status === 'rejected');
+  check('other firm cannot see a run (404)', (await call(`/agents/runs/${run1.data.id}`, { token: fa.token })).status === 404);
+
   console.log(results.join('\n'));
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

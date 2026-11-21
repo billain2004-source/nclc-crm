@@ -9,9 +9,11 @@
     "dev": "node --watch src/server.js",
     "db:setup": "node scripts/init-db.js",
     "db:reset": "node scripts/init-db.js --reset",
+    "db:migrate": "node scripts/init-db.js",
     "test:api": "node scripts/smoke-test.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.12.0",
     "bcryptjs": "2.4.3",
     "cors": "2.8.5",
     "dotenv": "16.4.5",

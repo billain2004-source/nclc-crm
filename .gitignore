@@ -1,5 +1,30 @@
+# Dependencies and build output
 node_modules/
-.env
 dist/
+.vite/
+coverage/
+
+# Secrets: DB password, JWT secret, APP_ENC_KEY (never commit)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# Logs
 logs/
 *.log
+
+# Backups and database dumps (may contain business data; never API keys)
+backups/
+*.zip
+db_data.sql
+db_schema.sql
+*.sql.gz
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

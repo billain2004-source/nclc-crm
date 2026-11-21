@@ -6,6 +6,8 @@ const path = require('path');
 const mysql = require('mysql2/promise');
 const config = require('../src/config');
 const { seed, syncHelp } = require('../db/seed');
+const { seedAi } = require('../db/seedAi');
+const { migrate } = require('../db/migrate');
 
 (async () => {
   const reset = process.argv.includes('--reset');
@@ -26,11 +28,13 @@ const { seed, syncHelp } = require('../db/seed');
     .split('\n').filter((l) => !/^\s*(CREATE DATABASE|USE)\b/i.test(l)).join('\n');
   await conn.query(sql);
   console.log('Schema applied.');
+  await migrate(conn);
 
   await conn.beginTransaction();
   try {
     await seed(conn);
     await syncHelp(conn);
+    await seedAi(conn);
     await conn.commit();
   } catch (e) {
     await conn.rollback();

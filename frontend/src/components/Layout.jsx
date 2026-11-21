@@ -9,6 +9,7 @@ const NAV = [
   { to: '/leads', label: 'Leads', icon: '✦' },
   { to: '/deals', label: 'Deals', icon: '◎' },
   { to: '/tasks', label: 'Tasks', icon: '✓' },
+  { to: '/ai/agents', label: 'AI agents', icon: '✨' },
 ];
 
 export default function Layout() {
@@ -18,8 +19,12 @@ export default function Layout() {
     can.admin && { to: '/admin/users', label: 'Users' },
     { to: '/admin/currencies', label: 'Currencies' },
     can.editHelp && { to: '/admin/help', label: 'Help text' },
-    can.admin && { to: '/admin/settings', label: 'Firm settings' },
   ].filter(Boolean);
+  // Settings menu: Super Admin and Firm Admin only
+  const settings = can.admin ? [
+    { to: '/settings/firm', label: 'Firm settings' },
+    { to: '/settings/api-keys', label: 'API Keys' },
+  ] : [];
 
   return (
     <div className="shell">
@@ -33,6 +38,8 @@ export default function Layout() {
           ))}
           <div className="nav-section">Admin</div>
           {admin.map((n) => <NavLink key={n.to} to={n.to} className={({ isActive }) => (isActive ? 'active' : '')}>{n.label}</NavLink>)}
+          {settings.length > 0 && <div className="nav-section">Settings</div>}
+          {settings.map((n) => <NavLink key={n.to} to={n.to} className={({ isActive }) => (isActive ? 'active' : '')}>{n.label}</NavLink>)}
         </nav>
       </aside>
       <div className="main">

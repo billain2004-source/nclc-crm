@@ -78,7 +78,7 @@ const PAGE_SIZE = 25;
 export default function EntityPage({
   title, helpKey, endpoint, columns, filters = [], formGroups, formHelp, defaults = {}, singular,
   canCreate = true, canDelete = () => true, rowActions, toolbar, toForm = (r) => r, fromForm = (v) => v,
-  reloadSignal, emptyText = 'No records found.', rowClass,
+  reloadSignal, emptyText = 'No records found.', rowClass, formExtra,
 }) {
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
@@ -169,6 +169,7 @@ export default function EntityPage({
           onSubmit={save}
           onDelete={editing.id && canDelete(editing) ? remove : null}
           onClose={() => setEditing(null)}
+          extra={formExtra && editing.id ? formExtra(editing, () => { setEditing(null); load(); }) : null}
         />
       )}
     </div>

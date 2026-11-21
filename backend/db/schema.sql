@@ -250,3 +250,112 @@ CREATE TABLE IF NOT EXISTS help_text (
   UNIQUE KEY uq_help_firm_key (firm_id, section_key),
   CONSTRAINT fk_help_user FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- AI: task types, API keys (encrypted), usage log ----------
+-- Editable list of AI task types. Each firm (and the platform) has its own primary key per task type.
+-- reset_minutes: an "exhausted" key is reactivated automatically this long after it ran out (0 = manual reset only).
+CREATE TABLE IF NOT EXISTS ai_task_types (
+  code           VARCHAR(32)  NOT NULL,
+  name           VARCHAR(80)  NOT NULL,
+  description    VARCHAR(255) NULL,
+  reset_minutes  INT UNSIGNED NOT NULL DEFAULT 60,
+  sort_order     SMALLINT     NOT NULL DEFAULT 0,
+  is_active      TINYINT(1)   NOT NULL DEFAULT 1,
+  created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- firm_id NULL = platform key (managed by the Super Admin, used by every firm after its own keys).
+-- key_enc holds the AES-256-GCM ciphertext (APP_ENC_KEY); only key_last4 is ever shown.
+CREATE TABLE IF NOT EXISTS api_keys (
+  id             INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  firm_id        INT UNSIGNED NULL,
+  name           VARCHAR(100) NOT NULL,
+  provider       VARCHAR(32)  NOT NULL,
+  model          VARCHAR(100) NULL,
+  task_type      VARCHAR(32)  NOT NULL,
+  priority       SMALLINT     NOT NULL DEFAULT 10,
+  status         ENUM('active','disabled','exhausted') NOT NULL DEFAULT 'active',
+  is_primary     TINYINT(1)   NOT NULL DEFAULT 0,
+  key_enc        TEXT         NOT NULL,
+  key_last4      CHAR(4)      NOT NULL,
+  usage_count    INT UNSIGNED NOT NULL DEFAULT 0,
+  success_count  INT UNSIGNED NOT NULL DEFAULT 0,
+  failure_count  INT UNSIGNED NOT NULL DEFAULT 0,
+  last_used_at   DATETIME     NULL,
+  last_error     VARCHAR(255) NULL,
+  exhausted_at   DATETIME     NULL,
+  created_by     INT UNSIGNED NULL,
+  updated_by     INT UNSIGNED NULL,
+  created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY ix_keys_pick (firm_id, task_type, status, priority),
+  CONSTRAINT fk_keys_firm      FOREIGN KEY (firm_id)    REFERENCES firms(id) ON DELETE CASCADE,
+  CONSTRAINT fk_keys_task_type FOREIGN KEY (task_type)  REFERENCES ai_task_types(code) ON UPDATE CASCADE,
+  CONSTRAINT fk_keys_creator   FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_keys_updater   FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- One row per call, failure, exhaustion, failover switch, reset and test. Never contains key material.
+CREATE TABLE IF NOT EXISTS api_key_usage_log (
+  id           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  firm_id      INT UNSIGNED NULL,
+  key_id       INT UNSIGNED NULL,
+  to_key_id    INT UNSIGNED NULL,
+  task_type    VARCHAR(32)  NOT NULL,
+  event        ENUM('success','failure','exhausted','switch','reset','test_ok','test_fail','all_failed') NOT NULL,
+  http_status  SMALLINT     NULL,
+  error_type   VARCHAR(32)  NULL,
+  message      VARCHAR(255) NULL,
+  source       VARCHAR(64)  NULL,
+  latency_ms   INT UNSIGNED NULL,
+  user_id      INT UNSIGNED NULL,
+  created_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY ix_usage_firm (firm_id, created_at),
+  KEY ix_usage_key (key_id),
+  CONSTRAINT fk_usage_firm   FOREIGN KEY (firm_id)   REFERENCES firms(id) ON DELETE CASCADE,
+  CONSTRAINT fk_usage_key    FOREIGN KEY (key_id)    REFERENCES api_keys(id) ON DELETE SET NULL,
+  CONSTRAINT fk_usage_to_key FOREIGN KEY (to_key_id) REFERENCES api_keys(id) ON DELETE SET NULL,
+  CONSTRAINT fk_usage_user   FOREIGN KEY (user_id)   REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- One row per AI agent run. Nothing an agent proposes is written to CRM records until a user
+-- approves it (status pending_approval -> approved, which applies proposed_changes; or rejected).
+CREATE TABLE IF NOT EXISTS agent_runs (
+  id                INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  firm_id           INT UNSIGNED NOT NULL,
+  agent             VARCHAR(40)  NOT NULL,
+  entity_type       VARCHAR(20)  NOT NULL,
+  entity_id         INT UNSIGNED NOT NULL,
+  entity_label      VARCHAR(200) NULL,
+  task_type         VARCHAR(32)  NOT NULL,
+  status            ENUM('pending_approval','approved','rejected','failed') NOT NULL DEFAULT 'pending_approval',
+  input_json        JSON         NOT NULL,
+  output_json       JSON         NULL,
+  proposed_changes  JSON         NULL,
+  key_id            INT UNSIGNED NULL,
+  key_name          VARCHAR(100) NULL,
+  provider          VARCHAR(32)  NULL,
+  model             VARCHAR(100) NULL,
+  attempts_json     JSON         NULL,
+  error             VARCHAR(500) NULL,
+  latency_ms        INT UNSIGNED NULL,
+  created_by        INT UNSIGNED NULL,
+  reviewed_by       INT UNSIGNED NULL,
+  reviewed_at       DATETIME     NULL,
+  review_note       VARCHAR(255) NULL,
+  applied_result    VARCHAR(255) NULL,
+  created_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY ix_runs_firm (firm_id, status, created_at),
+  KEY ix_runs_entity (firm_id, entity_type, entity_id),
+  CONSTRAINT fk_runs_firm      FOREIGN KEY (firm_id)     REFERENCES firms(id) ON DELETE CASCADE,
+  CONSTRAINT fk_runs_key       FOREIGN KEY (key_id)      REFERENCES api_keys(id) ON DELETE SET NULL,
+  CONSTRAINT fk_runs_task_type FOREIGN KEY (task_type)   REFERENCES ai_task_types(code) ON UPDATE CASCADE,
+  CONSTRAINT fk_runs_creator   FOREIGN KEY (created_by)  REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_runs_reviewer  FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
